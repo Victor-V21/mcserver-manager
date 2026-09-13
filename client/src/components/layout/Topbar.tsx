@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { Menu, Play, Square, RotateCw, Skull, Copy, Check, Wifi } from 'lucide-react';
+import { Menu, Play, Square, RotateCw, Skull, Copy, Check } from 'lucide-react';
 import { TelemetryData, PlayitStatus } from '../../lib/types';
+import { RarePowerIcon, RarePlayitIcon, RareTpsIcon } from '../rareui/RareIcons';
+import { GlassShimmerButton } from '../rareui/GlassShimmerButton';
 
 interface TopbarProps {
   currentTab: string;
@@ -22,6 +24,7 @@ export const Topbar: React.FC<TopbarProps> = ({
 
   const tabTitles: Record<string, { title: string; subtitle: string }> = {
     dashboard: { title: 'Dashboard', subtitle: 'Telemetría y control general en tiempo real' },
+    versions: { title: 'Versión & Motor', subtitle: 'Instalación y configuración de Minecraft, NeoForge y Java' },
     console: { title: 'Consola en Vivo', subtitle: 'Terminal interactiva y streaming de logs' },
     properties: { title: 'Configuración', subtitle: 'Editor de server.properties y visualizador MOTD' },
     players: { title: 'Jugadores & Permisos', subtitle: 'Administración de OPs, Whitelist y Bans' },
@@ -31,7 +34,7 @@ export const Topbar: React.FC<TopbarProps> = ({
   };
 
   const currentInfo = tabTitles[currentTab] || { title: 'Panel', subtitle: 'Administrador de Minecraft' };
-  const isOnline = telemetry?.isRunning;
+  const isOnline = Boolean(telemetry?.isRunning);
   const playitTunnel = playit?.tunnels?.[0];
 
   const handleCopyIp = () => {
@@ -48,7 +51,7 @@ export const Topbar: React.FC<TopbarProps> = ({
       <div className="flex items-center gap-3">
         <button
           onClick={onOpenMobileMenu}
-          className="lg:hidden p-2 rounded-xl bg-slate-800/80 text-slate-300 hover:text-white hover:bg-slate-700"
+          className="lg:hidden p-2 rounded-xl bg-slate-800/80 text-slate-300 hover:text-white hover:bg-slate-700 cursor-pointer"
           aria-label="Abrir menú"
         >
           <Menu className="w-5 h-5" />
@@ -68,10 +71,10 @@ export const Topbar: React.FC<TopbarProps> = ({
         {playitTunnel && (
           <button
             onClick={handleCopyIp}
-            className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-cyan-950/40 border border-cyan-500/30 text-cyan-300 text-xs font-mono hover:bg-cyan-900/40 transition-colors"
+            className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-950/40 border border-cyan-500/30 text-cyan-300 text-xs font-mono hover:bg-cyan-900/40 transition-colors cursor-pointer"
             title="Copiar dirección de conexión al portapapeles"
           >
-            <Wifi className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+            <RarePlayitIcon size={16} />
             <span className="max-w-[180px] truncate">{playitTunnel.assignedDomain}:{playitTunnel.publicPort}</span>
             {copied ? <Check className="w-3.5 h-3.5 text-emerald-400 ml-1" /> : <Copy className="w-3.5 h-3.5 text-cyan-400/70 ml-1" />}
           </button>
@@ -79,34 +82,22 @@ export const Topbar: React.FC<TopbarProps> = ({
 
         {/* TPS Pill */}
         {isOnline && telemetry?.tps && (
-          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-950/40 border border-emerald-500/30 text-emerald-300 text-xs font-mono">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block animate-ping" />
+          <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-emerald-300 text-xs font-mono">
+            <RareTpsIcon size={15} />
             <span>{telemetry.tps.current} TPS</span>
           </div>
         )}
 
-        {/* Power Dropdown */}
+        {/* Power Dropdown Trigger with GlassShimmerButton */}
         <div className="relative">
-          <button
+          <GlassShimmerButton
+            variant={isOnline ? 'emerald' : 'rose'}
+            size="sm"
             onClick={() => setShowPowerDropdown(!showPowerDropdown)}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-2 shadow-sm transition-all ${
-              isOnline
-                ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/30'
-                : 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-900/30'
-            }`}
           >
-            {isOnline ? (
-              <>
-                <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
-                <span>En Línea</span>
-              </>
-            ) : (
-              <>
-                <span className="w-2 h-2 rounded-full bg-white" />
-                <span>Detenido</span>
-              </>
-            )}
-          </button>
+            <RarePowerIcon size={15} />
+            <span>{isOnline ? 'En Línea' : 'Detenido'}</span>
+          </GlassShimmerButton>
 
           {/* Dropdown Menu */}
           {showPowerDropdown && (
@@ -115,8 +106,8 @@ export const Topbar: React.FC<TopbarProps> = ({
                 className="fixed inset-0 z-40"
                 onClick={() => setShowPowerDropdown(false)}
               />
-              <div className="absolute right-0 mt-2 w-52 rounded-xl bg-dark-900 border border-slate-700/80 shadow-2xl p-1.5 z-50 animate-fadeIn text-xs">
-                <div className="px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 border-b border-slate-800">
+              <div className="absolute right-0 mt-2 w-56 rounded-2xl bg-dark-900 border border-slate-700/80 shadow-2xl p-2 z-50 animate-fadeIn text-xs">
+                <div className="px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 border-b border-slate-800 font-mono">
                   Control de Energía
                 </div>
 
@@ -126,9 +117,9 @@ export const Topbar: React.FC<TopbarProps> = ({
                       onServerAction('start');
                       setShowPowerDropdown(false);
                     }}
-                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-emerald-400 hover:bg-emerald-500/10 transition-colors font-medium text-left mt-1"
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-emerald-400 hover:bg-emerald-500/10 transition-colors font-medium text-left mt-1 cursor-pointer"
                   >
-                    <Play className="w-4 h-4" />
+                    <Play className="w-4 h-4 fill-emerald-400" />
                     <span>Iniciar Servidor</span>
                   </button>
                 ) : (
@@ -138,7 +129,7 @@ export const Topbar: React.FC<TopbarProps> = ({
                         onServerAction('restart');
                         setShowPowerDropdown(false);
                       }}
-                      className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-amber-400 hover:bg-amber-500/10 transition-colors font-medium text-left mt-1"
+                      className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-amber-400 hover:bg-amber-500/10 transition-colors font-medium text-left mt-1 cursor-pointer"
                     >
                       <RotateCw className="w-4 h-4" />
                       <span>Reiniciar Servidor</span>
@@ -149,7 +140,7 @@ export const Topbar: React.FC<TopbarProps> = ({
                         onServerAction('stop');
                         setShowPowerDropdown(false);
                       }}
-                      className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-rose-400 hover:bg-rose-500/10 transition-colors font-medium text-left"
+                      className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-rose-400 hover:bg-rose-500/10 transition-colors font-medium text-left cursor-pointer"
                     >
                       <Square className="w-4 h-4" />
                       <span>Detener Servidor (/stop)</span>
@@ -162,7 +153,7 @@ export const Topbar: React.FC<TopbarProps> = ({
                         onServerAction('kill');
                         setShowPowerDropdown(false);
                       }}
-                      className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-rose-500 hover:bg-rose-600/20 transition-colors font-semibold text-left"
+                      className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-rose-500 hover:bg-rose-600/20 transition-colors font-semibold text-left cursor-pointer"
                     >
                       <Skull className="w-4 h-4" />
                       <span>Forzar Apagado (SIGKILL)</span>

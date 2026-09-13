@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../../lib/api';
 import { OpPlayer, WhitelistPlayer, BannedPlayer, BannedIp } from '../../lib/types';
 import { Modal } from '../../components/common/Modal';
+import { AnimatedTabs } from '../../components/rareui/AnimatedTab';
+import { RarePlayersIcon } from '../../components/rareui/RareIcons';
 import {
-  Users,
   Shield,
   CheckCircle,
   Ban,
@@ -128,7 +129,7 @@ export const PlayersView: React.FC = () => {
       <div className="glass-panel rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-slate-800">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-400">
-            <Users className="w-5 h-5" />
+            <RarePlayersIcon size={24} />
           </div>
           <div>
             <h2 className="text-base font-bold text-white tracking-wide">Control de Jugadores & Permisos</h2>
@@ -148,44 +149,17 @@ export const PlayersView: React.FC = () => {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-800 pb-1">
-        <button
-          onClick={() => setActiveTab('ops')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-medium transition-all ${
-            activeTab === 'ops'
-              ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
-          }`}
-        >
-          <Shield className="w-4 h-4" />
-          <span>Operadores (OPs) ({ops.length})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('whitelist')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-medium transition-all ${
-            activeTab === 'whitelist'
-              ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
-          }`}
-        >
-          <CheckCircle className="w-4 h-4" />
-          <span>Lista Blanca ({whitelist.length})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('bans')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-medium transition-all ${
-            activeTab === 'bans'
-              ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
-          }`}
-        >
-          <Ban className="w-4 h-4" />
-          <span>Baneos ({bannedPlayers.length + bannedIps.length})</span>
-        </button>
-      </div>
+      {/* Tabs with RareUI AnimatedTabs */}
+      <AnimatedTabs
+        tabs={[
+          { id: 'ops', label: 'Operadores (OPs)', badge: ops.length, icon: <Shield className="w-4 h-4 text-amber-400" /> },
+          { id: 'whitelist', label: 'Lista Blanca', badge: whitelist.length, icon: <CheckCircle className="w-4 h-4 text-emerald-400" /> },
+          { id: 'bans', label: 'Baneos', badge: bannedPlayers.length + bannedIps.length, icon: <Ban className="w-4 h-4 text-rose-400" /> },
+        ]}
+        activeTab={activeTab}
+        onChange={(id) => setActiveTab(id as any)}
+        layoutId="players-tabs"
+      />
 
       {/* TAB 1: OPS */}
       {activeTab === 'ops' && (

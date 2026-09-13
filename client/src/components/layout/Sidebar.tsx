@@ -1,16 +1,17 @@
 import React from 'react';
 import {
-  LayoutDashboard,
-  Terminal,
-  FileSliders,
-  Users,
-  Package,
-  Network,
-  Settings,
-  LogOut,
-  Server,
-  Zap,
-} from 'lucide-react';
+  RareServerIcon,
+  RareVersionsIcon,
+  RareTerminalIcon,
+  RarePropertiesIcon,
+  RarePlayersIcon,
+  RareModsIcon,
+  RareFilesIcon,
+  RarePlayitIcon,
+  RareSettingsIcon,
+  RarePowerIcon,
+} from '../rareui/RareIcons';
+import { LogOut } from 'lucide-react';
 import { TelemetryData } from '../../lib/types';
 import { useAuth } from '../../features/auth/AuthContext';
 
@@ -30,33 +31,37 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const { logout, username } = useAuth();
 
   const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'console', label: 'Consola en Vivo', icon: Terminal, badge: 'Live' },
-    { id: 'properties', label: 'Configuración', icon: FileSliders },
-    { id: 'players', label: 'Jugadores & OPs', icon: Users, count: telemetry?.players.online },
-    { id: 'mods', label: 'Gestor de Mods', icon: Package },
-    { id: 'playit', label: 'Túnel Playit.gg', icon: Network, status: 'ok' },
-    { id: 'settings', label: 'Ajustes del Panel', icon: Settings },
+    { id: 'dashboard', label: 'Dashboard', icon: RareServerIcon },
+    { id: 'versions', label: 'Versión & Motor', icon: RareVersionsIcon, badge: 'NeoForge' },
+    { id: 'console', label: 'Consola en Vivo', icon: RareTerminalIcon, badge: 'Live' },
+    { id: 'properties', label: 'Configuración', icon: RarePropertiesIcon },
+    { id: 'players', label: 'Jugadores & OPs', icon: RarePlayersIcon, count: telemetry?.players?.online },
+    { id: 'mods', label: 'Gestor de Mods', icon: RareModsIcon },
+    { id: 'files', label: 'Archivos Servidor', icon: RareFilesIcon },
+    { id: 'playit', label: 'Túnel Playit.gg', icon: RarePlayitIcon },
+    { id: 'settings', label: 'Ajustes del Panel', icon: RareSettingsIcon },
   ];
 
-  const isOnline = telemetry?.isRunning;
+  const isOnline = Boolean(telemetry?.isRunning);
 
   return (
     <aside className="hidden lg:flex flex-col w-64 bg-dark-900 border-r border-slate-800/80 shrink-0 h-screen sticky top-0 select-none z-30">
-      {/* Brand */}
+      {/* Brand Header */}
       <div className="p-4 border-b border-slate-800/80 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center shadow-md shadow-emerald-900/30">
-            <Server className="w-5 h-5 text-white" />
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-900/30 border border-emerald-400/30">
+            <RareVersionsIcon size={22} className="text-white" />
           </div>
           <div>
             <span className="font-bold text-sm tracking-tight text-white block">MC Manager</span>
-            <span className="text-[11px] text-slate-400 font-mono block">NeoForge 1.21.1</span>
+            <span className="text-[11px] text-emerald-400 font-mono block">
+              {telemetry?.version || 'Sin Versión'}
+            </span>
           </div>
         </div>
       </div>
 
-      {/* Server Status Compact Bar */}
+      {/* Server Status Compact Banner */}
       <div className="px-4 py-3 bg-dark-950/60 border-b border-slate-800/80 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="relative flex h-2.5 w-2.5">
@@ -69,21 +74,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
               }`}
             />
           </span>
-          <span className="text-xs font-semibold text-slate-300">
+          <span className="text-xs font-semibold text-slate-300 font-mono">
             {isOnline ? 'Servidor Activo' : 'Servidor Detenido'}
           </span>
         </div>
 
         <button
           onClick={onOpenPowerModal}
-          className="p-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
-          title="Acciones de Energía"
+          className="p-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
+          title="Control de Energía"
         >
-          <Zap className="w-3.5 h-3.5 text-amber-400" />
+          <RarePowerIcon size={16} />
         </button>
       </div>
 
-      {/* Navigation List */}
+      {/* Navigation List with RareUI Interactive Effects */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
         {navItems.map((item) => {
           const Icon = item.icon;
@@ -93,17 +98,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <button
               key={item.id}
               onClick={() => onSelectTab(item.id)}
-              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all ${
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${
                 isActive
-                  ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shadow-sm'
+                  ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.15)] font-semibold'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
               }`}
             >
               <div className="flex items-center gap-3">
                 <Icon
-                  className={`w-4 h-4 ${
-                    isActive ? 'text-emerald-400' : 'text-slate-400 group-hover:text-slate-300'
-                  }`}
+                  size={18}
+                  className={isActive ? 'text-emerald-400' : 'text-slate-400'}
                 />
                 <span>{item.label}</span>
               </div>
@@ -124,7 +128,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         })}
       </nav>
 
-      {/* Mini Telemetry Widget */}
+      {/* Mini Telemetry Widget (only if online) */}
       {telemetry && isOnline && (
         <div className="mx-3 mb-3 p-3 rounded-xl bg-dark-950/80 border border-slate-800/90 text-[11px] space-y-2">
           <div className="flex justify-between text-slate-400 font-mono">
@@ -158,18 +162,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* User Footer */}
       <div className="p-3 border-t border-slate-800/80 bg-dark-950/40 flex items-center justify-between">
         <div className="flex items-center gap-2.5 overflow-hidden">
-          <div className="w-7 h-7 rounded-lg bg-slate-800 flex items-center justify-center font-bold text-xs text-emerald-400 border border-slate-700">
+          <div className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-xs border border-emerald-500/30">
             {username?.charAt(0).toUpperCase() || 'A'}
           </div>
           <div className="truncate">
             <span className="text-xs font-medium text-slate-200 block truncate">{username || 'Admin'}</span>
-            <span className="text-[10px] text-slate-400 block font-mono">Panel Admin</span>
+            <span className="text-[10px] text-slate-400 block font-mono">Panel Producción</span>
           </div>
         </div>
 
         <button
           onClick={logout}
-          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
           title="Cerrar Sesión"
         >
           <LogOut className="w-4 h-4" />

@@ -1,0 +1,28 @@
+services:
+  mcserver-manager:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mcserver-manager:latest
+    container_name: mcserver-manager
+    restart: unless-stopped
+    ports:
+      # Web panel & WebSocket
+      - "3000:3000"
+      # Minecraft Java game port
+      - "25565:25565"
+    environment:
+      - PORT=3000
+      - NODE_ENV=production
+      - SERVER_ROOT=/data
+      - PANEL_CONFIG_PATH=/data/panel-config.json
+      # Optional: set an initial master password (or leave empty to configure on first web login)
+      - MASTER_PASSWORD=admin
+    volumes:
+      # Persistent storage for Minecraft files, mods, and panel settings
+      - ./data:/data
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"

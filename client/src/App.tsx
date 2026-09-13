@@ -5,10 +5,12 @@ import { useAuth } from './features/auth/AuthContext';
 import { LoginView } from './features/auth/LoginView';
 import { MainLayout } from './components/layout/MainLayout';
 import { DashboardView } from './features/dashboard/DashboardView';
+import { VersionsView } from './features/versions/VersionsView';
 import { ConsoleView } from './features/console/ConsoleView';
 import { PropertiesView } from './features/properties/PropertiesView';
 import { PlayersView } from './features/players/PlayersView';
 import { ModsView } from './features/mods/ModsView';
+import { FilesView } from './features/files/FilesView';
 import { PlayitView } from './features/playit/PlayitView';
 import { SettingsView } from './features/settings/SettingsView';
 
@@ -96,6 +98,8 @@ export const App: React.FC = () => {
         />
       )}
 
+      {currentTab === 'versions' && <VersionsView />}
+
       {currentTab === 'console' && <ConsoleView />}
 
       {currentTab === 'properties' && <PropertiesView />}
@@ -103,6 +107,8 @@ export const App: React.FC = () => {
       {currentTab === 'players' && <PlayersView />}
 
       {currentTab === 'mods' && <ModsView />}
+
+      {currentTab === 'files' && <FilesView />}
 
       {currentTab === 'playit' && <PlayitView />}
 

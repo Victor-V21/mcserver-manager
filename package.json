@@ -4,8 +4,15 @@
   "private": true,
   "description": "Production-grade Minecraft & Playit Management Panel",
   "scripts": {
-    "dev": "npm --prefix client run dev",
-    "build": "npm --prefix client run build",
-    "preview": "npm --prefix client run preview"
+    "dev:client": "npm --prefix client run dev",
+    "dev:server": "npm --prefix server run dev",
+    "dev": "concurrently \"npm --prefix client run dev\" \"npm --prefix server run dev\"",
+    "build:client": "npm --prefix client run build",
+    "build:server": "npm --prefix server run build",
+    "build": "npm --prefix client run build && npm --prefix server run build",
+    "start": "node server/dist/index.js"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
   }
 }

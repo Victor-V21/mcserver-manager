@@ -2,8 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../../lib/api';
 import { ModFile } from '../../lib/types';
 import { Modal } from '../../components/common/Modal';
+import { AnimatedTabs } from '../../components/rareui/AnimatedTab';
+import { GlassShimmerButton } from '../../components/rareui/GlassShimmerButton';
+import { RareModsIcon } from '../../components/rareui/RareIcons';
 import {
-  Package,
   UploadCloud,
   Search,
   CheckCircle2,
@@ -120,7 +122,7 @@ export const ModsView: React.FC = () => {
       <div className="glass-panel rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-slate-800">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400">
-            <Package className="w-5 h-5" />
+            <RareModsIcon size={24} />
           </div>
           <div>
             <div className="flex items-center gap-2">
@@ -133,14 +135,15 @@ export const ModsView: React.FC = () => {
           </div>
         </div>
 
-        {/* Upload Button */}
-        <button
+        {/* Upload Button with RareUI GlassShimmerButton */}
+        <GlassShimmerButton
+          variant="emerald"
+          size="sm"
           onClick={() => fileInputRef.current?.click()}
-          className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center gap-2 shadow-lg shadow-emerald-950/40 transition-all self-start sm:self-auto"
         >
           <UploadCloud className="w-4 h-4" />
           <span>Subir Mods (.jar)</span>
-        </button>
+        </GlassShimmerButton>
         <input
           ref={fileInputRef}
           type="file"
@@ -202,42 +205,18 @@ export const ModsView: React.FC = () => {
         </div>
       )}
 
-      {/* Filters and search bar */}
+      {/* Filters with RareUI AnimatedTabs and search bar */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-        <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto">
-          <button
-            onClick={() => setFilter('all')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
-              filter === 'all'
-                ? 'bg-slate-800 text-white border border-slate-700'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            Todos ({mods.length})
-          </button>
-          <button
-            onClick={() => setFilter('enabled')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all flex items-center gap-1.5 ${
-              filter === 'enabled'
-                ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
-                : 'text-slate-400 hover:text-emerald-300'
-            }`}
-          >
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Activos ({enabledCount})</span>
-          </button>
-          <button
-            onClick={() => setFilter('disabled')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all flex items-center gap-1.5 ${
-              filter === 'disabled'
-                ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
-                : 'text-slate-400 hover:text-rose-300'
-            }`}
-          >
-            <XCircle className="w-3.5 h-3.5 text-rose-400" />
-            <span>Inactivos ({disabledCount})</span>
-          </button>
-        </div>
+        <AnimatedTabs
+          tabs={[
+            { id: 'all', label: 'Todos', badge: mods.length },
+            { id: 'enabled', label: 'Activos', badge: enabledCount, icon: <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> },
+            { id: 'disabled', label: 'Inactivos', badge: disabledCount, icon: <XCircle className="w-3.5 h-3.5 text-rose-400" /> },
+          ]}
+          activeTab={filter}
+          onChange={(id) => setFilter(id as any)}
+          layoutId="mods-filter-tabs"
+        />
 
         <div className="relative w-full sm:w-72">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />

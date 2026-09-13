@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../lib/api';
 import { MotdEditor } from './MotdEditor';
+import { AnimatedTabs } from '../../components/rareui/AnimatedTab';
+import { RarePropertiesIcon } from '../../components/rareui/RareIcons';
 import {
-  FileSliders,
   Save,
   RotateCcw,
   Sparkles,
@@ -125,7 +126,7 @@ export const PropertiesView: React.FC = () => {
       <div className="glass-panel rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-slate-800">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400">
-            <FileSliders className="w-5 h-5" />
+            <RarePropertiesIcon size={22} />
           </div>
           <div>
             <h2 className="text-base font-bold text-white tracking-wide">Configuración del Servidor</h2>
@@ -137,7 +138,7 @@ export const PropertiesView: React.FC = () => {
           <button
             onClick={handleReset}
             disabled={saving}
-            className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700 flex items-center gap-1.5 transition-colors"
+            className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             <span>Restaurar</span>
@@ -146,7 +147,7 @@ export const PropertiesView: React.FC = () => {
           <button
             onClick={handleSave}
             disabled={saving}
-            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-semibold flex items-center gap-1.5 shadow-lg shadow-emerald-950/40 transition-all"
+            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-semibold flex items-center gap-1.5 shadow-lg shadow-emerald-950/40 transition-all cursor-pointer"
           >
             {saving ? (
               <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -183,27 +184,13 @@ export const PropertiesView: React.FC = () => {
         </div>
       )}
 
-      {/* Category Tabs */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 border-b border-slate-800">
-        {tabs.map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${
-                isActive
-                  ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
-              }`}
-            >
-              <Icon className="w-4 h-4" />
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
-      </div>
+      {/* Category Tabs with RareUI AnimatedTabs */}
+      <AnimatedTabs
+        tabs={tabs.map((t) => ({ id: t.id, label: t.label, icon: <t.icon className="w-4 h-4" /> }))}
+        activeTab={activeTab}
+        onChange={(id) => setActiveTab(id as any)}
+        layoutId="properties-tabs"
+      />
 
       {/* Tab Panels */}
       <div className="glass-panel rounded-2xl p-5 sm:p-6 border border-slate-800">

@@ -1,0 +1,21 @@
+import path from 'path';
+
+export const DEFAULT_SERVER_ROOT = process.env.SERVER_ROOT || '/home/vm/mcserver';
+export const DEFAULT_PORT = parseInt(process.env.PORT || '3000', 10);
+export const PANEL_CONFIG_FILE = process.env.PANEL_CONFIG_PATH || path.join(process.cwd(), 'panel-config.json');
+
+export const SUBDIRS = {
+  SERVER: 'server',
+  MODS: path.join('server', 'mods'),
+  LOGS: path.join('server', 'logs'),
+  LATEST_LOG: path.join('server', 'logs', 'latest.log'),
+  PROPERTIES: path.join('server', 'server.properties'),
+  OPS: path.join('server', 'ops.json'),
+  WHITELIST: path.join('server', 'whitelist.json'),
+  BANNED_PLAYERS: path.join('server', 'banned-players.json'),
+  BANNED_IPS: path.join('server', 'banned-ips.json'),
+  EULA: path.join('server', 'eula.txt'),
+  PLAYIT: 'playit',
+  SCRIPTS: 'scripts',
+  START_SCRIPT: path.join('scripts', 'start.sh'),
+};

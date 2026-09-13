@@ -1,17 +1,16 @@
 import React from 'react';
 import {
-  LayoutDashboard,
-  Terminal,
-  Package,
-  Users,
-  Sliders,
-  X,
-  FileSliders,
-  Network,
-  Settings,
-  LogOut,
-  Server,
-} from 'lucide-react';
+  RareServerIcon,
+  RareVersionsIcon,
+  RareTerminalIcon,
+  RareModsIcon,
+  RareFilesIcon,
+  RarePlayersIcon,
+  RarePropertiesIcon,
+  RarePlayitIcon,
+  RareSettingsIcon,
+} from '../rareui/RareIcons';
+import { Sliders, X, LogOut } from 'lucide-react';
 import { useAuth } from '../../features/auth/AuthContext';
 import { TelemetryData } from '../../lib/types';
 
@@ -33,26 +32,29 @@ export const MobileNav: React.FC<MobileNavProps> = ({
   const { logout, username } = useAuth();
 
   const primaryTabs = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'console', label: 'Consola', icon: Terminal },
-    { id: 'mods', label: 'Mods', icon: Package },
-    { id: 'players', label: 'Jugadores', icon: Users },
+    { id: 'dashboard', label: 'Dashboard', icon: RareServerIcon },
+    { id: 'versions', label: 'Versión', icon: RareVersionsIcon },
+    { id: 'console', label: 'Consola', icon: RareTerminalIcon },
+    { id: 'mods', label: 'Mods', icon: RareModsIcon },
+    { id: 'files', label: 'Archivos', icon: RareFilesIcon },
   ];
 
   const drawerItems = [
-    { id: 'dashboard', label: 'Dashboard General', icon: LayoutDashboard },
-    { id: 'console', label: 'Consola en Vivo (xterm)', icon: Terminal },
-    { id: 'properties', label: 'Editor server.properties', icon: FileSliders },
-    { id: 'players', label: 'Control de Jugadores & OPs', icon: Users },
-    { id: 'mods', label: 'Gestor de Mods (.jar)', icon: Package },
-    { id: 'playit', label: 'Túnel Playit.gg', icon: Network },
-    { id: 'settings', label: 'Ajustes del Panel', icon: Settings },
+    { id: 'dashboard', label: 'Dashboard General', icon: RareServerIcon },
+    { id: 'versions', label: 'Versión & Motor NeoForge', icon: RareVersionsIcon },
+    { id: 'console', label: 'Consola en Vivo (xterm)', icon: RareTerminalIcon },
+    { id: 'properties', label: 'Editor server.properties', icon: RarePropertiesIcon },
+    { id: 'players', label: 'Control de Jugadores & OPs', icon: RarePlayersIcon },
+    { id: 'mods', label: 'Gestor de Mods (.jar)', icon: RareModsIcon },
+    { id: 'files', label: 'Archivos del Servidor', icon: RareFilesIcon },
+    { id: 'playit', label: 'Túnel Playit.gg', icon: RarePlayitIcon },
+    { id: 'settings', label: 'Ajustes del Panel', icon: RareSettingsIcon },
   ];
 
   return (
     <>
       {/* Bottom Floating Bar for Smartphones */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 h-16 bg-dark-900/95 backdrop-blur-lg border-t border-slate-800/80 px-4 flex items-center justify-around z-30">
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 h-16 bg-dark-900/95 backdrop-blur-lg border-t border-slate-800/80 px-2 flex items-center justify-around z-30">
         {primaryTabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = currentTab === tab.id;
@@ -60,11 +62,11 @@ export const MobileNav: React.FC<MobileNavProps> = ({
             <button
               key={tab.id}
               onClick={() => onSelectTab(tab.id)}
-              className={`flex flex-col items-center justify-center py-1 px-3 rounded-lg transition-colors ${
+              className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-colors cursor-pointer ${
                 isActive ? 'text-emerald-400' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              <Icon className="w-5 h-5 mb-0.5" />
+              <Icon size={18} className="mb-0.5" />
               <span className="text-[10px] font-medium">{tab.label}</span>
             </button>
           );
@@ -72,11 +74,11 @@ export const MobileNav: React.FC<MobileNavProps> = ({
 
         <button
           onClick={onClose}
-          className={`flex flex-col items-center justify-center py-1 px-3 rounded-lg transition-colors ${
+          className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-colors cursor-pointer ${
             isOpen ? 'text-emerald-400' : 'text-slate-400 hover:text-slate-200'
           }`}
         >
-          <Sliders className="w-5 h-5 mb-0.5" />
+          <Sliders className="w-4 h-4 mb-0.5" />
           <span className="text-[10px] font-medium">Más</span>
         </button>
       </div>
@@ -95,8 +97,8 @@ export const MobileNav: React.FC<MobileNavProps> = ({
             <div>
               <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-4">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center text-white">
-                    <Server className="w-4 h-4" />
+                  <div className="w-8 h-8 rounded-xl bg-emerald-600 flex items-center justify-center text-white">
+                    <RareVersionsIcon size={18} />
                   </div>
                   <div>
                     <h3 className="font-bold text-sm text-white">MC Manager</h3>
@@ -107,7 +109,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({
                 </div>
                 <button
                   onClick={onClose}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-white bg-slate-800"
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-white bg-slate-800 cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -124,13 +126,13 @@ export const MobileNav: React.FC<MobileNavProps> = ({
                         onSelectTab(item.id);
                         onClose();
                       }}
-                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-colors ${
+                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-colors cursor-pointer ${
                         isActive
                           ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
                           : 'text-slate-300 hover:bg-slate-800/60'
                       }`}
                     >
-                      <Icon className="w-4 h-4" />
+                      <Icon size={16} />
                       <span>{item.label}</span>
                     </button>
                   );
@@ -145,7 +147,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({
                   logout();
                   onClose();
                 }}
-                className="flex items-center gap-1.5 text-xs text-rose-400 hover:text-rose-300 px-2 py-1 rounded-lg hover:bg-rose-500/10"
+                className="flex items-center gap-1.5 text-xs text-rose-400 hover:text-rose-300 px-2 py-1 rounded-lg hover:bg-rose-500/10 cursor-pointer"
               >
                 <LogOut className="w-3.5 h-3.5" />
                 <span>Salir</span>

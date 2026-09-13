@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../lib/api';
 import { PanelSettings, PathValidationStatus } from '../../lib/types';
+import { RareSettingsIcon } from '../../components/rareui/RareIcons';
+import { GlassShimmerButton } from '../../components/rareui/GlassShimmerButton';
 import {
-  Settings,
   FolderTree,
   CheckCircle2,
   XCircle,
@@ -106,7 +107,7 @@ export const SettingsView: React.FC = () => {
       <div className="glass-panel rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-slate-800">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-xl bg-slate-800 text-slate-200">
-            <Settings className="w-5 h-5" />
+            <RareSettingsIcon size={22} />
           </div>
           <div>
             <h2 className="text-base font-bold text-white tracking-wide">Ajustes del Panel</h2>
@@ -114,18 +115,19 @@ export const SettingsView: React.FC = () => {
           </div>
         </div>
 
-        <button
+        <GlassShimmerButton
+          variant="emerald"
+          size="sm"
           onClick={handleSaveSettings}
           disabled={saving}
-          className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-semibold flex items-center gap-1.5 shadow-lg shadow-emerald-950/40 transition-all self-start sm:self-auto"
         >
           {saving ? (
             <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
           ) : (
-            <Save className="w-4 h-4" />
+            <Save className="w-3.5 h-3.5" />
           )}
           <span>Guardar en panel-config.json</span>
-        </button>
+        </GlassShimmerButton>
       </div>
 
       {successMessage && (

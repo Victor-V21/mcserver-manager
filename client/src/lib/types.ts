@@ -18,7 +18,7 @@ export interface TelemetryData {
     java: number; // percentage 0-100
   };
   ram: {
-    used: number; // in bytes or MB
+    used: number; // in MB
     total: number; // system total in MB
     maxAllocated: number; // Xmx in MB
   };
@@ -115,4 +115,68 @@ export interface PanelSettings {
 export interface UserSession {
   username: string;
   isAuthenticated: boolean;
+}
+
+// Version & Loader Types
+export type ServerEngineType = 'neoforge' | 'vanilla';
+
+export interface MinecraftRelease {
+  id: string;
+  type: 'release' | 'snapshot';
+  releaseTime: string;
+}
+
+export interface LoaderRelease {
+  version: string;
+  mcVersion: string;
+  isRecommended?: boolean;
+}
+
+export interface InstalledVersionInfo {
+  isInstalled: boolean;
+  serverType: ServerEngineType;
+  mcVersion: string | null;
+  loaderVersion: string | null;
+  javaVersion: string | null;
+  jarFile: string | null;
+  eulaAccepted: boolean;
+  installedAt?: string;
+}
+
+export interface InstallVersionPayload {
+  serverType: ServerEngineType;
+  mcVersion: string;
+  loaderVersion?: string;
+  javaVersion: string;
+  acceptEula: boolean;
+  ramInitial: string;
+  ramMax: string;
+}
+
+// File Explorer Types
+export interface FileItem {
+  name: string;
+  relativePath: string;
+  isDirectory: boolean;
+  size: number;
+  modified: string;
+  extension: string;
+}
+
+export interface FilesResponse {
+  currentPath: string;
+  parentPath: string | null;
+  items: FileItem[];
+}
+
+// Local Discovered NeoForge Version Item
+export interface LocalNeoForgeItem {
+  version: string;
+  isInstalled: boolean;
+  isActive: boolean;
+  hasUnixArgs?: boolean;
+  hasInstallerJar?: boolean;
+  jarFileName?: string;
+  source: string;
+  modified?: string;
 }

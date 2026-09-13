@@ -1,4 +1,3 @@
-import { mockDevApi } from './mockDevAdapter';
 import {
   TelemetryData,
   OpPlayer,
@@ -8,213 +7,303 @@ import {
   ModFile,
   PlayitStatus,
   PanelSettings,
+  UserSession,
+  InstalledVersionInfo,
+  MinecraftRelease,
+  LoaderRelease,
+  InstallVersionPayload,
+  FilesResponse,
+  LocalNeoForgeItem,
 } from './types';
 
-const IS_DEV_MODE = true; // Set default dev adapter support for immediate local execution
+async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
+  const res = await fetch(url, {
+    ...options,
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
 
-async function fetchWithFallback<T>(url: string, options: RequestInit, mockFallback: () => Promise<T>): Promise<T> {
-  if (IS_DEV_MODE && !window.location.search.includes('backend=real')) {
+  if (!res.ok) {
+    let errorMsg = `Error HTTP ${res.status}`;
     try {
-      return await mockFallback();
-    } catch (e) {
-      console.warn('Mock fallback failed, attempting real fetch:', e);
+      const text = await res.text();
+      try {
+        const errJson = JSON.parse(text);
+        if (errJson.message) errorMsg = errJson.message;
+        else if (errJson.error) errorMsg = errJson.error;
+      } catch {
+        if (text && text.trim().length > 0) {
+          // If HTML (like 500 proxy error from Vite), extract a clean message
+          if (text.includes('<html') || text.includes('<!doctype html>')) {
+            errorMsg = `El servidor backend no está respondiendo (HTTP ${res.status})`;
+          } else {
+            errorMsg = text.length > 200 ? text.slice(0, 200) : text;
+          }
+        }
+      }
+    } catch {
+      // ignore
     }
+    throw new Error(errorMsg);
   }
 
-  try {
-    const res = await fetch(url, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
-    });
-
-    if (!res.ok) {
-      const errorText = await res.text();
-      throw new Error(`API error ${res.status}: ${errorText}`);
-    }
-
+  // Check if response has JSON content
+  const contentType = res.headers.get('content-type');
+  if (contentType && contentType.includes('application/json')) {
     return await res.json();
-  } catch (err) {
-    console.warn(`Real API call to ${url} failed, falling back to dynamic mock:`, err);
-    return await mockFallback();
   }
+  return {} as T;
 }
 
 export const api = {
   // Auth
-  login: async (password: string) => {
-    return fetchWithFallback(
-      '/api/auth/login',
-      { method: 'POST', body: JSON.stringify({ password }) },
-      () => mockDevApi.login(password)
-    );
+  login: async (password: string): Promise<{ success: boolean; token?: string }> => {
+    return request('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ password }),
+    });
   },
-  getMe: async () => {
-    return fetchWithFallback('/api/auth/me', { method: 'GET' }, () => mockDevApi.getMe());
+  getMe: async (): Promise<UserSession> => {
+    return request('/api/auth/me', { method: 'GET' });
+  },
+  logout: async (): Promise<{ success: boolean }> => {
+    return request('/api/auth/logout', { method: 'POST' });
   },
 
   // Status & Telemetry
   getStatus: async (): Promise<TelemetryData> => {
-    return fetchWithFallback('/api/status', { method: 'GET' }, () => mockDevApi.getStatus());
+    return request('/api/status', { method: 'GET' });
   },
 
   // Server Actions
-  executeServerAction: async (action: 'start' | 'stop' | 'restart' | 'kill') => {
-    return fetchWithFallback(
-      '/api/server/action',
-      { method: 'POST', body: JSON.stringify({ action }) },
-      () => mockDevApi.executeAction(action)
-    );
+  executeServerAction: async (action: 'start' | 'stop' | 'restart' | 'kill'): Promise<{ success: boolean; message: string }> => {
+    return request('/api/server/action', {
+      method: 'POST',
+      body: JSON.stringify({ action }),
+    });
   },
 
   // RCON Command
-  sendCommand: async (command: string) => {
-    return fetchWithFallback(
-      '/api/server/command',
-      { method: 'POST', body: JSON.stringify({ command }) },
-      () => mockDevApi.sendCommand(command)
-    );
+  sendCommand: async (command: string): Promise<{ success: boolean; response?: string }> => {
+    return request('/api/server/command', {
+      method: 'POST',
+      body: JSON.stringify({ command }),
+    });
+  },
+
+  // Versions & Loaders
+  getInstalledVersion: async (): Promise<InstalledVersionInfo> => {
+    return request('/api/versions/installed', { method: 'GET' });
+  },
+  getAvailableMinecraftVersions: async (): Promise<MinecraftRelease[]> => {
+    return request('/api/versions/minecraft', { method: 'GET' });
+  },
+  getAvailableLoaderVersions: async (type: string, mcVersion: string): Promise<LoaderRelease[]> => {
+    return request(`/api/versions/loaders?type=${encodeURIComponent(type)}&mcVersion=${encodeURIComponent(mcVersion)}`, {
+      method: 'GET',
+    });
+  },
+  installServerVersion: async (payload: InstallVersionPayload): Promise<{ success: boolean; message: string }> => {
+    return request('/api/versions/install', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
   },
 
   // Server Properties
   getProperties: async (): Promise<Record<string, any>> => {
-    return fetchWithFallback('/api/properties', { method: 'GET' }, () => mockDevApi.getProperties());
+    return request('/api/properties', { method: 'GET' });
   },
-  saveProperties: async (props: Record<string, any>) => {
-    return fetchWithFallback(
-      '/api/properties',
-      { method: 'PUT', body: JSON.stringify(props) },
-      () => mockDevApi.saveProperties(props)
-    );
+  saveProperties: async (props: Record<string, any>): Promise<{ success: boolean; message: string }> => {
+    return request('/api/properties', {
+      method: 'PUT',
+      body: JSON.stringify(props),
+    });
   },
 
   // Players
   getOps: async (): Promise<OpPlayer[]> => {
-    return fetchWithFallback('/api/players/ops', { method: 'GET' }, () => mockDevApi.getOps());
+    return request('/api/players/ops', { method: 'GET' });
   },
-  addOp: async (name: string, level = 4) => {
-    return fetchWithFallback(
-      '/api/players/ops',
-      { method: 'POST', body: JSON.stringify({ name, level }) },
-      () => mockDevApi.addOp(name, level)
-    );
+  addOp: async (name: string, level = 4): Promise<OpPlayer> => {
+    return request('/api/players/ops', {
+      method: 'POST',
+      body: JSON.stringify({ name, level }),
+    });
   },
-  removeOp: async (uuid: string) => {
-    return fetchWithFallback(
-      `/api/players/ops/${uuid}`,
-      { method: 'DELETE' },
-      () => mockDevApi.removeOp(uuid)
-    );
+  removeOp: async (uuid: string): Promise<{ success: boolean }> => {
+    return request(`/api/players/ops/${encodeURIComponent(uuid)}`, {
+      method: 'DELETE',
+    });
   },
 
   getWhitelist: async (): Promise<WhitelistPlayer[]> => {
-    return fetchWithFallback('/api/players/whitelist', { method: 'GET' }, () => mockDevApi.getWhitelist());
+    return request('/api/players/whitelist', { method: 'GET' });
   },
-  addWhitelist: async (name: string) => {
-    return fetchWithFallback(
-      `/api/players/whitelist/${encodeURIComponent(name)}`,
-      { method: 'POST' },
-      () => mockDevApi.addWhitelist(name)
-    );
+  addWhitelist: async (name: string): Promise<WhitelistPlayer> => {
+    return request(`/api/players/whitelist/${encodeURIComponent(name)}`, {
+      method: 'POST',
+    });
   },
-  removeWhitelist: async (name: string) => {
-    return fetchWithFallback(
-      `/api/players/whitelist/${encodeURIComponent(name)}`,
-      { method: 'DELETE' },
-      () => mockDevApi.removeWhitelist(name)
-    );
+  removeWhitelist: async (name: string): Promise<{ success: boolean }> => {
+    return request(`/api/players/whitelist/${encodeURIComponent(name)}`, {
+      method: 'DELETE',
+    });
   },
 
   getBans: async (): Promise<{ players: BannedPlayer[]; ips: BannedIp[] }> => {
-    return fetchWithFallback('/api/players/bans', { method: 'GET' }, () => mockDevApi.getBans());
+    return request('/api/players/bans', { method: 'GET' });
   },
-  unbanPlayer: async (name: string) => {
-    return fetchWithFallback(
-      `/api/players/bans/player/${encodeURIComponent(name)}`,
-      { method: 'DELETE' },
-      () => mockDevApi.unbanPlayer(name)
-    );
+  unbanPlayer: async (name: string): Promise<{ success: boolean }> => {
+    return request(`/api/players/bans/player/${encodeURIComponent(name)}`, {
+      method: 'DELETE',
+    });
   },
-  unbanIp: async (ip: string) => {
-    return fetchWithFallback(
-      `/api/players/bans/ip/${encodeURIComponent(ip)}`,
-      { method: 'DELETE' },
-      () => mockDevApi.unbanIp(ip)
-    );
+  unbanIp: async (ip: string): Promise<{ success: boolean }> => {
+    return request(`/api/players/bans/ip/${encodeURIComponent(ip)}`, {
+      method: 'DELETE',
+    });
   },
-  kickPlayer: async (name: string, reason?: string) => {
-    return fetchWithFallback(
-      `/api/players/kick`,
-      { method: 'POST', body: JSON.stringify({ name, reason }) },
-      () => mockDevApi.kickPlayer(name, reason)
-    );
+  kickPlayer: async (name: string, reason?: string): Promise<{ success: boolean }> => {
+    return request('/api/players/kick', {
+      method: 'POST',
+      body: JSON.stringify({ name, reason }),
+    });
   },
 
   // Mods
   getMods: async (): Promise<ModFile[]> => {
-    return fetchWithFallback('/api/mods', { method: 'GET' }, () => mockDevApi.getMods());
+    return request('/api/mods', { method: 'GET' });
   },
-  toggleMod: async (filename: string, enable: boolean) => {
-    return fetchWithFallback(
-      '/api/mods/toggle',
-      { method: 'PATCH', body: JSON.stringify({ filename, enable }) },
-      () => mockDevApi.toggleMod(filename, enable)
-    );
+  toggleMod: async (filename: string, enable: boolean): Promise<{ success: boolean }> => {
+    return request('/api/mods/toggle', {
+      method: 'PATCH',
+      body: JSON.stringify({ filename, enable }),
+    });
   },
-  deleteMod: async (filename: string) => {
-    return fetchWithFallback(
-      `/api/mods/${encodeURIComponent(filename)}`,
-      { method: 'DELETE' },
-      () => mockDevApi.deleteMod(filename)
-    );
+  deleteMod: async (filename: string): Promise<{ success: boolean }> => {
+    return request(`/api/mods/${encodeURIComponent(filename)}`, {
+      method: 'DELETE',
+    });
   },
-  renameMod: async (oldFilename: string, newFilename: string) => {
-    return fetchWithFallback(
-      `/api/mods/rename`,
-      { method: 'PATCH', body: JSON.stringify({ oldFilename, newFilename }) },
-      () => mockDevApi.renameMod(oldFilename, newFilename)
-    );
+  renameMod: async (oldFilename: string, newFilename: string): Promise<{ success: boolean }> => {
+    return request('/api/mods/rename', {
+      method: 'PATCH',
+      body: JSON.stringify({ oldFilename, newFilename }),
+    });
   },
-  uploadMod: async (file: File) => {
+  uploadMod: async (file: File): Promise<{ success: boolean; filename: string }> => {
     const formData = new FormData();
     formData.append('file', file);
-    return fetchWithFallback(
-      '/api/mods/upload',
-      { method: 'POST', body: formData, headers: {} },
-      () => mockDevApi.uploadModMock(file.name, file.size)
-    );
+    const res = await fetch('/api/mods/upload', {
+      method: 'POST',
+      body: formData,
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      throw new Error(`Error al subir mod: HTTP ${res.status}`);
+    }
+    return await res.json();
   },
 
   // Playit
   getPlayitStatus: async (): Promise<PlayitStatus> => {
-    return fetchWithFallback('/api/playit/status', { method: 'GET' }, () => mockDevApi.getPlayitStatus());
+    return request('/api/playit/status', { method: 'GET' });
   },
-  executePlayitAction: async (action: 'start' | 'stop' | 'restart') => {
-    return fetchWithFallback(
-      '/api/playit/action',
-      { method: 'POST', body: JSON.stringify({ action }) },
-      () => mockDevApi.executePlayitAction(action)
-    );
+  executePlayitAction: async (action: 'start' | 'stop' | 'restart'): Promise<{ success: boolean; message: string }> => {
+    return request('/api/playit/action', {
+      method: 'POST',
+      body: JSON.stringify({ action }),
+    });
   },
 
   // Settings
   getSettings: async (): Promise<PanelSettings> => {
-    return fetchWithFallback('/api/settings', { method: 'GET' }, () => mockDevApi.getSettings());
+    return request('/api/settings', { method: 'GET' });
   },
-  updateSettings: async (settings: Partial<PanelSettings>) => {
-    return fetchWithFallback(
-      '/api/settings',
-      { method: 'POST', body: JSON.stringify(settings) },
-      () => mockDevApi.updateSettings(settings)
-    );
+  updateSettings: async (settings: Partial<PanelSettings>): Promise<{ success: boolean; settings: PanelSettings }> => {
+    return request('/api/settings', {
+      method: 'POST',
+      body: JSON.stringify(settings),
+    });
   },
-  validatePath: async (path: string) => {
-    return fetchWithFallback(
-      '/api/settings/validate-path',
-      { method: 'POST', body: JSON.stringify({ path }) },
-      () => mockDevApi.validatePath(path)
-    );
+  validatePath: async (path: string): Promise<{ exists: boolean; paths: any }> => {
+    return request('/api/settings/validate-path', {
+      method: 'POST',
+      body: JSON.stringify({ path }),
+    });
+  },
+
+  // Local NeoForge Discovery, Upload & Activation
+  getLocalNeoForgeVersions: async (): Promise<{ versions: LocalNeoForgeItem[]; activeVersion: string | null }> => {
+    return request('/api/versions/neoforge/local', { method: 'GET' });
+  },
+  setActiveNeoForgeVersion: async (version: string): Promise<{ success: boolean; activeVersion: string }> => {
+    return request('/api/versions/neoforge/active', {
+      method: 'POST',
+      body: JSON.stringify({ version }),
+    });
+  },
+  uploadNeoForgeJar: async (file: File): Promise<{ success: boolean; message: string; version: string }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch('/api/versions/neoforge/upload', {
+      method: 'POST',
+      body: formData,
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(text || `Error al subir NeoForge: HTTP ${res.status}`);
+    }
+    return await res.json();
+  },
+
+  // File Manager / Explorer
+  getFiles: async (path = ''): Promise<FilesResponse> => {
+    return request(`/api/files?path=${encodeURIComponent(path)}`, { method: 'GET' });
+  },
+  getFileContent: async (path: string): Promise<{ path: string; content: string }> => {
+    return request(`/api/files/content?path=${encodeURIComponent(path)}`, { method: 'GET' });
+  },
+  saveFileContent: async (path: string, content: string): Promise<{ success: boolean; message: string }> => {
+    return request('/api/files/content', {
+      method: 'PUT',
+      body: JSON.stringify({ path, content }),
+    });
+  },
+  uploadFiles: async (targetPath: string, files: File[]): Promise<{ success: boolean; files: string[] }> => {
+    const formData = new FormData();
+    for (const f of files) {
+      formData.append('files', f);
+    }
+    const res = await fetch(`/api/files/upload?path=${encodeURIComponent(targetPath)}`, {
+      method: 'POST',
+      body: formData,
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(text || `Error al subir archivo: HTTP ${res.status}`);
+    }
+    return await res.json();
+  },
+  createDirectory: async (targetPath: string, name: string): Promise<{ success: boolean; path: string }> => {
+    return request('/api/files/mkdir', {
+      method: 'POST',
+      body: JSON.stringify({ path: targetPath, name }),
+    });
+  },
+  renameItem: async (oldPath: string, newName: string): Promise<{ success: boolean }> => {
+    return request('/api/files/rename', {
+      method: 'POST',
+      body: JSON.stringify({ oldPath, newName }),
+    });
+  },
+  deleteItem: async (path: string): Promise<{ success: boolean }> => {
+    return request(`/api/files?path=${encodeURIComponent(path)}`, { method: 'DELETE' });
   },
 };

@@ -112,14 +112,14 @@ export const LoginView: React.FC = () => {
               className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-emerald-400 transition-colors"
             >
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Contraseña demo predeterminada: <strong className="font-mono text-emerald-400">admin</strong></span>
+              <span>Contraseña inicial predeterminada: <strong className="font-mono text-emerald-400">admin</strong></span>
             </button>
           </div>
         </div>
 
         {/* Footer info */}
         <div className="mt-6 text-center text-xs text-slate-400 flex items-center justify-center gap-4">
-          <span>NeoForge / Forge / Vanilla</span>
+          <span>NeoForge Server & Vanilla</span>
           <span>•</span>
           <span>Docker Ready</span>
           <span>•</span>

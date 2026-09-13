@@ -3,20 +3,26 @@ import { TelemetryData, PlayitStatus } from '../../lib/types';
 import { MetricGauge } from '../../components/common/MetricGauge';
 import { ConnectedPlayersList } from './ConnectedPlayersList';
 import { QuickActionsModal } from './QuickActionsModal';
+import { RetroPixelButton } from '../../components/rareui/RetroPixelButton';
+import { GlassShimmerButton } from '../../components/rareui/GlassShimmerButton';
 import {
-  Cpu,
-  Database,
-  HardDrive,
-  Activity,
-  Play,
-  Square,
+  RareServerIcon,
+  RareCpuIcon,
+  RareRamIcon,
+  RareDiskIcon,
+  RareTpsIcon,
+  RareVersionsIcon,
+  RarePropertiesIcon,
+  RareModsIcon,
+  RarePlayitIcon,
+  RareTerminalIcon,
+} from '../../components/rareui/RareIcons';
+import {
   RotateCw,
   Clock,
   Radio,
-  Server,
-  Terminal,
-  FileCode,
   ExternalLink,
+  ChevronRight,
 } from 'lucide-react';
 
 interface DashboardViewProps {
@@ -55,6 +61,37 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   return (
     <div className="space-y-6 animate-fadeIn pb-12">
+      {/* Installation Banner if no version detected */}
+      {!telemetry?.version && (
+        <div className="glass-panel rounded-2xl p-5 border border-amber-500/30 bg-amber-500/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-300">
+              <RareVersionsIcon size={24} />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <span>Servidor Minecraft aún no configurado</span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300">
+                  Acción Requerida
+                </span>
+              </h3>
+              <p className="text-xs text-slate-300 mt-0.5">
+                Selecciona tu versión de Minecraft y build de NeoForge para descargar e instalar el servidor automáticamente.
+              </p>
+            </div>
+          </div>
+
+          <GlassShimmerButton
+            variant="amber"
+            size="sm"
+            onClick={() => onNavigateTab('versions')}
+          >
+            <span>Ir al Gestor de Versiones</span>
+            <ChevronRight className="w-4 h-4" />
+          </GlassShimmerButton>
+        </div>
+      )}
+
       {/* Top Main Server Banner */}
       <div className="glass-panel rounded-2xl p-5 sm:p-6 border border-slate-800 relative overflow-hidden">
         {/* Glow accent */}
@@ -69,11 +106,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <div
               className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 border ${
                 isOnline
-                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.2)]'
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 shadow-[0_0_25px_rgba(16,185,129,0.25)]'
                   : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
               }`}
             >
-              <Server className="w-7 h-7" />
+              <RareServerIcon size={30} />
             </div>
 
             <div>
@@ -94,7 +131,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <span>{telemetry?.state.toUpperCase() || 'OFFLINE'}</span>
                 </span>
                 <span className="text-xs text-slate-400 font-mono">
-                  {telemetry?.version || 'NeoForge 1.21.1'}
+                  {telemetry?.version || 'Sin versión instalada'}
                 </span>
               </div>
 
@@ -111,7 +148,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 )}
                 {playitTunnel && (
                   <div className="flex items-center gap-1.5 font-mono text-cyan-400">
-                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />
                     <span>Playit: {playitTunnel.assignedDomain}:{playitTunnel.publicPort}</span>
                   </div>
                 )}
@@ -119,52 +156,45 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
 
-          {/* Quick Action Buttons */}
+          {/* Quick Action Buttons with RareUI */}
           <div className="flex items-center gap-2.5 flex-wrap">
             {!isOnline ? (
-              <button
+              <RetroPixelButton
+                variant="emerald"
+                size="md"
                 onClick={() => onServerAction('start')}
-                className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center gap-2 shadow-lg shadow-emerald-950/40 transition-all active:scale-[0.98]"
               >
-                <Play className="w-4 h-4 fill-white" />
-                <span>Iniciar Servidor</span>
-              </button>
+                INICIAR SERVIDOR
+              </RetroPixelButton>
             ) : (
               <>
-                <button
+                <GlassShimmerButton
+                  variant="amber"
+                  size="sm"
                   onClick={() => onServerAction('restart')}
-                  className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-medium border border-slate-700 flex items-center gap-1.5 transition-all"
-                  title="Reiniciar Servidor"
                 >
                   <RotateCw className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Reiniciar</span>
-                </button>
+                  <span>Reiniciar</span>
+                </GlassShimmerButton>
 
-                <button
-                  onClick={() => onServerAction('stop')}
-                  className="px-3.5 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 text-xs font-medium border border-rose-500/30 flex items-center gap-1.5 transition-all"
-                  title="Detener Servidor"
-                >
-                  <Square className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Detener</span>
-                </button>
-
-                <button
+                <GlassShimmerButton
+                  variant="rose"
+                  size="sm"
                   onClick={() => setIsPowerModalOpen(true)}
-                  className="px-3 py-2 rounded-xl bg-dark-950 hover:bg-slate-800 text-slate-300 text-xs font-medium border border-slate-700 transition-colors"
                 >
-                  Más Acciones...
-                </button>
+                  <span>Detener / Kill...</span>
+                </GlassShimmerButton>
               </>
             )}
 
-            <button
+            <GlassShimmerButton
+              variant="default"
+              size="sm"
               onClick={() => onNavigateTab('console')}
-              className="px-3.5 py-2 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 flex items-center gap-1.5 transition-all"
             >
-              <Terminal className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Ver Consola</span>
-            </button>
+              <RareTerminalIcon size={16} />
+              <span>Consola</span>
+            </GlassShimmerButton>
           </div>
         </div>
       </div>
@@ -174,10 +204,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* CPU */}
         <MetricGauge
           title="Uso de CPU"
-          value={isOnline ? `${telemetry?.cpu.java || 0}%` : '0%'}
-          subtitle={`Host global: ${telemetry?.cpu.host || 0}%`}
-          percentage={telemetry?.cpu.java || 0}
-          icon={Cpu}
+          value={isOnline ? `${telemetry?.cpu?.java ?? 0}%` : '0%'}
+          subtitle={`Host global: ${telemetry?.cpu?.host ?? 0}%`}
+          percentage={telemetry?.cpu?.java ?? 0}
+          icon={RareCpuIcon as any}
           variant="emerald"
         />
 
@@ -185,73 +215,93 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <MetricGauge
           title="Memoria RAM"
           value={
-            isOnline
-              ? `${((telemetry?.ram.used || 0) / 1024).toFixed(1)} GB`
+            isOnline && telemetry?.ram?.used
+              ? `${(telemetry.ram.used / 1024).toFixed(1)} GB`
               : '0.0 GB'
           }
-          subtitle={`Asignado: ${((telemetry?.ram.maxAllocated || 8192) / 1024).toFixed(0)} GB / Sistema: ${((telemetry?.ram.total || 16384) / 1024).toFixed(0)} GB`}
+          subtitle={`Asignado: ${((telemetry?.ram?.maxAllocated || 8192) / 1024).toFixed(0)} GB / Sistema: ${((telemetry?.ram?.total || 16384) / 1024).toFixed(0)} GB`}
           percentage={
-            telemetry
+            telemetry?.ram?.used && telemetry?.ram?.maxAllocated
               ? (telemetry.ram.used / telemetry.ram.maxAllocated) * 100
               : 0
           }
-          icon={Database}
+          icon={RareRamIcon as any}
           variant="cyan"
         />
 
         {/* TPS */}
         <MetricGauge
           title="Rendimiento del Mundo"
-          value={isOnline ? `${telemetry?.tps.current || 20.0} TPS` : '-- TPS'}
+          value={isOnline ? `${telemetry?.tps?.current ?? 20.0} TPS` : '-- TPS'}
           subtitle={
             isOnline
-              ? (telemetry?.tps.current || 20) >= 19.5
-                ? 'Rendimiento Óptimo (100%)'
+              ? (telemetry?.tps?.current ?? 20) >= 19.5
+                ? 'Rendimiento Óptimo'
                 : 'Carga Elevada detectada'
               : 'Servidor apagado'
           }
-          percentage={isOnline ? ((telemetry?.tps.current || 20) / 20) * 100 : 0}
-          icon={Activity}
-          variant={(telemetry?.tps.current || 20) >= 19.0 ? 'emerald' : 'amber'}
+          percentage={isOnline ? ((telemetry?.tps?.current ?? 20) / 20) * 100 : 0}
+          icon={RareTpsIcon as any}
+          variant={(telemetry?.tps?.current ?? 20) >= 19.0 ? 'emerald' : 'amber'}
         />
 
         {/* Disk */}
         <MetricGauge
           title="Almacenamiento"
-          value={`${telemetry?.disk.used || 34.8} GB`}
-          subtitle={`Libre: ${telemetry?.disk.free || 85.2} GB de ${telemetry?.disk.total || 120} GB`}
-          percentage={
-            telemetry
-              ? (telemetry.disk.used / telemetry.disk.total) * 100
-              : 29
+          value={telemetry?.disk?.used ? `${telemetry.disk.used} GB` : '-- GB'}
+          subtitle={
+            telemetry?.disk
+              ? `Libre: ${telemetry.disk.free} GB de ${telemetry.disk.total} GB`
+              : 'Consultando espacio...'
           }
-          icon={HardDrive}
+          percentage={
+            telemetry?.disk
+              ? (telemetry.disk.used / telemetry.disk.total) * 100
+              : 0
+          }
+          icon={RareDiskIcon as any}
           variant="indigo"
         />
       </div>
 
       {/* Connected Players Section */}
       <ConnectedPlayersList
-        players={telemetry?.players.list || []}
-        maxPlayers={telemetry?.players.max || 20}
+        players={telemetry?.players?.list || []}
+        maxPlayers={telemetry?.players?.max || 20}
         onKick={onKickPlayer}
         onBan={onBanPlayer}
         onToggleOp={onToggleOp}
       />
 
-      {/* Quick Access Tiles */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Quick Access Navigation Tiles with RareIcons */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+        <div
+          onClick={() => onNavigateTab('versions')}
+          className="glass-panel-interactive rounded-2xl p-4 cursor-pointer flex items-center justify-between"
+        >
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400">
+              <RareVersionsIcon size={20} />
+            </div>
+            <div>
+              <h4 className="text-xs font-bold text-white">Versión & Motor</h4>
+              <p className="text-[11px] text-slate-400">Instalador NeoForge / MC</p>
+            </div>
+          </div>
+          <ExternalLink className="w-4 h-4 text-slate-500" />
+        </div>
+
         <div
           onClick={() => onNavigateTab('properties')}
           className="glass-panel-interactive rounded-2xl p-4 cursor-pointer flex items-center justify-between"
         >
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-400">
-              <FileCode className="w-5 h-5" />
+              <RarePropertiesIcon size={20} />
             </div>
             <div>
               <h4 className="text-xs font-bold text-white">server.properties</h4>
-              <p className="text-[11px] text-slate-400">Gamemode, MOTD, Semilla y puertos</p>
+              <p className="text-[11px] text-slate-400">Gamemode, MOTD y red</p>
             </div>
           </div>
           <ExternalLink className="w-4 h-4 text-slate-500" />
@@ -262,12 +312,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           className="glass-panel-interactive rounded-2xl p-4 cursor-pointer flex items-center justify-between"
         >
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400">
-              <Server className="w-5 h-5" />
+            <div className="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-400">
+              <RareModsIcon size={20} />
             </div>
             <div>
-              <h4 className="text-xs font-bold text-white">Mods de NeoForge</h4>
-              <p className="text-[11px] text-slate-400">Subir, activar o desactivar .jar</p>
+              <h4 className="text-xs font-bold text-white">Gestor de Mods</h4>
+              <p className="text-[11px] text-slate-400">Subir y conmutar .jar</p>
             </div>
           </div>
           <ExternalLink className="w-4 h-4 text-slate-500" />
@@ -278,12 +328,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           className="glass-panel-interactive rounded-2xl p-4 cursor-pointer flex items-center justify-between"
         >
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-400">
-              <Radio className="w-5 h-5" />
+            <div className="p-2.5 rounded-xl bg-indigo-500/10 text-indigo-400">
+              <RarePlayitIcon size={20} />
             </div>
             <div>
               <h4 className="text-xs font-bold text-white">Túnel Playit.gg</h4>
-              <p className="text-[11px] text-slate-400">Conexión pública sin abrir puertos</p>
+              <p className="text-[11px] text-slate-400">IP pública y puertos</p>
             </div>
           </div>
           <ExternalLink className="w-4 h-4 text-slate-500" />

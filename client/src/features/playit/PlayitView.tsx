@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../lib/api';
 import { PlayitStatus } from '../../lib/types';
+import { GlassShimmerButton } from '../../components/rareui/GlassShimmerButton';
+import { RarePlayitIcon } from '../../components/rareui/RareIcons';
 import {
-  Network,
   Play,
   Square,
   RotateCw,
@@ -78,7 +79,7 @@ export const PlayitView: React.FC = () => {
                   : 'bg-slate-800 border-slate-700 text-slate-500'
               }`}
             >
-              <Network className="w-7 h-7" />
+              <RarePlayitIcon size={32} />
             </div>
 
             <div>
@@ -109,36 +110,39 @@ export const PlayitView: React.FC = () => {
             </div>
           </div>
 
-          {/* Action buttons */}
+          {/* Action buttons with RareUI GlassShimmerButton */}
           <div className="flex items-center gap-2.5">
             {!isRunning ? (
-              <button
+              <GlassShimmerButton
+                variant="cyan"
+                size="md"
                 onClick={() => handleAction('start')}
                 disabled={actionLoading}
-                className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold flex items-center gap-2 shadow-lg shadow-cyan-950/40 transition-all"
               >
-                <Play className="w-4 h-4 fill-white" />
+                <Play className="w-4 h-4 fill-cyan-400" />
                 <span>Iniciar Túnel</span>
-              </button>
+              </GlassShimmerButton>
             ) : (
               <>
-                <button
+                <GlassShimmerButton
+                  variant="default"
+                  size="sm"
                   onClick={() => handleAction('restart')}
                   disabled={actionLoading}
-                  className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 flex items-center gap-1.5 transition-colors"
                 >
                   <RotateCw className="w-3.5 h-3.5 text-cyan-400" />
                   <span>Reiniciar</span>
-                </button>
+                </GlassShimmerButton>
 
-                <button
+                <GlassShimmerButton
+                  variant="rose"
+                  size="sm"
                   onClick={() => handleAction('stop')}
                   disabled={actionLoading}
-                  className="px-3.5 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 text-xs font-medium border border-rose-500/30 flex items-center gap-1.5 transition-colors"
                 >
                   <Square className="w-3.5 h-3.5" />
                   <span>Detener</span>
-                </button>
+                </GlassShimmerButton>
               </>
             )}
           </div>
