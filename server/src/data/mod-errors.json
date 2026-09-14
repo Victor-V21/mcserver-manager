@@ -1,0 +1,46 @@
+[
+  {
+    "pattern": "Missing or unsupported mandatory dependencies",
+    "modRegex": "Requested by: '([^']+)'.*?Expected range: '([^']+)'|Mod ID: '([^']+)'",
+    "solution": "Faltan dependencias obligatorias o una versión de NeoForge/Minecraft es incorrecta. Se requiere la versión: $VERSION.",
+    "severity": "warning"
+  },
+  {
+    "pattern": "ModLoadingException|Loading errors encountered",
+    "modRegex": "- Mod ([a-zA-Z0-9_.-]+) requires (?:neoforge )?([^\\s]+)",
+    "solution": "Un mod requiere una versión diferente de NeoForge u otra dependencia. Se requiere la versión: $VERSION.",
+    "severity": "warning"
+  },
+  {
+    "pattern": "has failed to load correctly",
+    "modRegex": "- ([a-zA-Z0-9_.-]+) \\(([a-zA-Z0-9_.-]+)\\) has failed to load correctly",
+    "solution": "El mod falló al cargar. Puede estar corrupto, ser incompatible, o requerir mods adicionales.",
+    "severity": "error"
+  },
+  {
+    "pattern": "java\\.lang\\.NoClassDefFoundError",
+    "modRegex": "(?:LAYER SERVICE/|net\\.[a-zA-Z0-9_.-]+\\.mods\\.)([a-zA-Z0-9_-]+)|([a-zA-Z0-9_.-]+)\\.jar",
+    "solution": "Falta una dependencia o hay un conflicto de clases. Revisa si falta descargar algún mod adicional o si la versión de este mod es incorrecta."
+  },
+  {
+    "pattern": "java\\.lang\\.NoSuchMethodError",
+    "modRegex": "([a-zA-Z0-9_.-]+)\\.jar",
+    "solution": "El mod intenta usar un método que no existe. Probablemente sea incompatible con esta versión de Minecraft, NeoForge, o con otro mod instalado."
+  },
+  {
+    "pattern": "Attempted to load class net/minecraft/client/|invalid dist DEDICATED_SERVER",
+    "modRegex": "- ([a-zA-Z0-9_.-]+) \\(([a-zA-Z0-9_.-]+)\\) has failed to load correctly|([a-zA-Z0-9_.-]+)\\.jar",
+    "solution": "Este mod es solo para el cliente (Client-Side) y no puede ser instalado en el servidor. Bórralo o deshabilítalo.",
+    "severity": "error"
+  },
+  {
+    "pattern": "java\\.lang\\.ClassNotFoundException",
+    "modRegex": "([a-zA-Z0-9_.-]+)\\.jar",
+    "solution": "No se encontró una clase necesaria. Verifica que todas las dependencias o librerías que requiere el mod estén instaladas."
+  },
+  {
+    "pattern": "ModFileMissingException",
+    "modRegex": "([a-zA-Z0-9_-]+)",
+    "solution": "El archivo del mod no se ha encontrado correctamente. Puede estar corrupto o faltar una parte."
+  }
+]

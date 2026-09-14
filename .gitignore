@@ -13,7 +13,8 @@ panel-config.json
 *.tmp
 *.bak
 *.log
-data/
+/data/
+!server/src/data/
 mcserver/
 test/
 

@@ -1,0 +1,25 @@
+# Node dependencies
+node_modules
+client/node_modules
+server/node_modules
+
+# Build artifacts
+client/dist
+server/dist
+
+# Version control
+.git
+.gitignore
+
+# Local development and tests
+test
+mcserver
+panel-config.json
+*.log
+*.tmp
+*.bak
+test-*.js
+
+# Preserve server source data while ignoring runtime data directory
+/data
+!server/src/data
