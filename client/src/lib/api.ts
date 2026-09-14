@@ -17,16 +17,28 @@ import {
 } from './types';
 
 async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
+  const token = typeof localStorage !== 'undefined' ? localStorage.getItem('mc_auth_token') : null;
   const res = await fetch(url, {
     ...options,
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
   });
 
   if (!res.ok) {
+    if (res.status === 401 && !url.includes('/api/auth/login')) {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem('mc_auth_token');
+        localStorage.removeItem('mc_auth_user');
+      }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('mc_auth_unauthorized'));
+      }
+    }
+
     let errorMsg = `Error HTTP ${res.status}`;
     try {
       const text = await res.text();
@@ -198,13 +210,23 @@ export const api = {
   uploadMod: async (file: File): Promise<{ success: boolean; filename: string }> => {
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('mods', file);
+    const token = typeof localStorage !== 'undefined' ? localStorage.getItem('mc_auth_token') : null;
     const res = await fetch('/api/mods/upload', {
       method: 'POST',
       body: formData,
       credentials: 'include',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
     });
     if (!res.ok) {
-      throw new Error(`Error al subir mod: HTTP ${res.status}`);
+      let errMsg = `Error al subir mod: HTTP ${res.status}`;
+      try {
+        const errJson = await res.json();
+        if (errJson.error) errMsg = errJson.error;
+      } catch {}
+      throw new Error(errMsg);
     }
     return await res.json();
   },
@@ -238,7 +260,12 @@ export const api = {
   },
 
   // Local NeoForge Discovery, Upload & Activation
-  getLocalNeoForgeVersions: async (): Promise<{ versions: LocalNeoForgeItem[]; activeVersion: string | null }> => {
+  getLocalNeoForgeVersions: async (): Promise<{
+    versions: LocalNeoForgeItem[];
+    activeVersion: string | null;
+    serverDir?: string;
+    detectedMinecraftVersion?: string | null;
+  }> => {
     return request('/api/versions/neoforge/local', { method: 'GET' });
   },
   setActiveNeoForgeVersion: async (version: string): Promise<{ success: boolean; activeVersion: string }> => {
@@ -250,10 +277,14 @@ export const api = {
   uploadNeoForgeJar: async (file: File): Promise<{ success: boolean; message: string; version: string }> => {
     const formData = new FormData();
     formData.append('file', file);
+    const token = typeof localStorage !== 'undefined' ? localStorage.getItem('mc_auth_token') : null;
     const res = await fetch('/api/versions/neoforge/upload', {
       method: 'POST',
       body: formData,
       credentials: 'include',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
     });
     if (!res.ok) {
       const text = await res.text();
@@ -280,10 +311,14 @@ export const api = {
     for (const f of files) {
       formData.append('files', f);
     }
+    const token = typeof localStorage !== 'undefined' ? localStorage.getItem('mc_auth_token') : null;
     const res = await fetch(`/api/files/upload?path=${encodeURIComponent(targetPath)}`, {
       method: 'POST',
       body: formData,
       credentials: 'include',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
     });
     if (!res.ok) {
       const text = await res.text();

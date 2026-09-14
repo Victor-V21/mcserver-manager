@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '../../lib/api';
 import { ModFile } from '../../lib/types';
 import { Modal } from '../../components/common/Modal';
@@ -13,6 +14,9 @@ import {
   Trash2,
   Edit3,
   FileCheck,
+  AlertTriangle,
+  RefreshCw,
+  X,
 } from 'lucide-react';
 
 export const ModsView: React.FC = () => {
@@ -20,6 +24,13 @@ export const ModsView: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'enabled' | 'disabled'>('all');
+
+  // Notification and Restart State
+  const [notice, setNotice] = useState<{
+    type: 'warning' | 'error' | 'success';
+    message: string;
+  } | null>(null);
+  const [restarting, setRestarting] = useState(false);
 
   // Upload state
   const [isDragging, setIsDragging] = useState(false);
@@ -40,7 +51,18 @@ export const ModsView: React.FC = () => {
     setLoading(true);
     try {
       const data = await api.getMods();
-      setMods(data);
+      // Ensure each item has both filename and name populated
+      const normalized = (data || []).map((m: any) => ({
+        ...m,
+        filename: m.filename || m.name,
+        name: m.name || m.filename,
+      }));
+      setMods(normalized);
+    } catch (err: any) {
+      setNotice({
+        type: 'error',
+        message: err.message || 'Error al cargar la lista de mods',
+      });
     } finally {
       setLoading(false);
     }
@@ -48,30 +70,85 @@ export const ModsView: React.FC = () => {
 
   const handleToggleMod = async (mod: ModFile) => {
     const nextState = !mod.isEnabled;
-    await api.toggleMod(mod.filename, nextState);
-    loadMods();
+    const target = mod.filename || mod.name;
+    try {
+      await api.toggleMod(target, nextState);
+      setNotice({
+        type: 'warning',
+        message: `Mod "${mod.name}" ${nextState ? 'activado' : 'desactivado'}. Es necesario reiniciar el servidor para que los cambios se apliquen en Minecraft.`,
+      });
+      await loadMods();
+    } catch (err: any) {
+      setNotice({
+        type: 'error',
+        message: err.message || 'Error al cambiar estado del mod',
+      });
+    }
   };
 
   const handleDelete = async () => {
     if (!modToDelete) return;
-    await api.deleteMod(modToDelete.filename);
-    setModToDelete(null);
-    loadMods();
+    const target = modToDelete.filename || modToDelete.name;
+    try {
+      await api.deleteMod(target);
+      setNotice({
+        type: 'warning',
+        message: `Mod "${modToDelete.name}" eliminado del disco. Es necesario reiniciar el servidor para que los cambios se apliquen en Minecraft.`,
+      });
+      setModToDelete(null);
+      await loadMods();
+    } catch (err: any) {
+      setNotice({
+        type: 'error',
+        message: err.message || 'Error al eliminar el mod',
+      });
+    }
   };
 
   const handleRename = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!modToRename || !newFilename.trim()) return;
-    await api.renameMod(modToRename.filename, newFilename.trim());
-    setModToRename(null);
-    setNewFilename('');
-    loadMods();
+    const target = modToRename.filename || modToRename.name;
+    try {
+      await api.renameMod(target, newFilename.trim());
+      setNotice({
+        type: 'warning',
+        message: `Mod renombrado a "${newFilename.trim()}". Es necesario reiniciar el servidor para que los cambios se apliquen en Minecraft.`,
+      });
+      setModToRename(null);
+      setNewFilename('');
+      await loadMods();
+    } catch (err: any) {
+      setNotice({
+        type: 'error',
+        message: err.message || 'Error al renombrar el mod',
+      });
+    }
+  };
+
+  const handleQuickRestart = async () => {
+    setRestarting(true);
+    try {
+      await api.executeServerAction('restart');
+      setNotice({
+        type: 'success',
+        message: 'Reiniciando el servidor Minecraft para aplicar los cambios de mods...',
+      });
+    } catch (err: any) {
+      setNotice({
+        type: 'error',
+        message: err.message || 'Error al reiniciar el servidor',
+      });
+    } finally {
+      setRestarting(false);
+    }
   };
 
   const handleFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     setUploading(true);
 
+    let uploadedCount = 0;
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       if (!file.name.endsWith('.jar') && !file.name.endsWith('.jar.disabled')) {
@@ -80,13 +157,27 @@ export const ModsView: React.FC = () => {
       setUploadProgress((prev) => ({ ...prev, [file.name]: 30 }));
       await new Promise((r) => setTimeout(r, 200));
       setUploadProgress((prev) => ({ ...prev, [file.name]: 75 }));
-      await api.uploadMod(file);
-      setUploadProgress((prev) => ({ ...prev, [file.name]: 100 }));
+      try {
+        await api.uploadMod(file);
+        uploadedCount++;
+        setUploadProgress((prev) => ({ ...prev, [file.name]: 100 }));
+      } catch (err: any) {
+        setNotice({
+          type: 'error',
+          message: `Error al subir ${file.name}: ${err.message}`,
+        });
+      }
     }
 
     await new Promise((r) => setTimeout(r, 400));
     setUploading(false);
     setUploadProgress({});
+    if (uploadedCount > 0) {
+      setNotice({
+        type: 'warning',
+        message: `${uploadedCount} mod(s) subido(s) exitosamente. Es necesario reiniciar el servidor para que los cambios se apliquen en Minecraft.`,
+      });
+    }
     loadMods();
   };
 
@@ -96,9 +187,10 @@ export const ModsView: React.FC = () => {
   };
 
   const filteredMods = mods.filter((mod) => {
+    const q = search.toLowerCase();
     const matchesSearch =
-      mod.name.toLowerCase().includes(search.toLowerCase()) ||
-      mod.filename.toLowerCase().includes(search.toLowerCase());
+      (mod.name && mod.name.toLowerCase().includes(q)) ||
+      (mod.filename && mod.filename.toLowerCase().includes(q));
     if (filter === 'enabled') return matchesSearch && mod.isEnabled;
     if (filter === 'disabled') return matchesSearch && !mod.isEnabled;
     return matchesSearch;
@@ -153,6 +245,76 @@ export const ModsView: React.FC = () => {
           onChange={(e) => handleFiles(e.target.files)}
         />
       </div>
+
+      {/* Pending changes notice banner with Framer Motion entrance */}
+      <AnimatePresence>
+        {notice && (
+          <motion.div
+            initial={{ opacity: 0, y: -8, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8, scale: 0.98 }}
+            transition={{ type: 'spring', stiffness: 450, damping: 30 }}
+            className={`glass-panel rounded-2xl p-4 border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+              notice.type === 'warning'
+                ? 'bg-amber-500/10 border-amber-500/30 text-amber-200'
+                : notice.type === 'error'
+                ? 'bg-rose-500/10 border-rose-500/30 text-rose-200'
+                : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-200'
+            }`}
+          >
+            <div className="flex items-start sm:items-center gap-3">
+              <div
+                className={`p-2 rounded-xl shrink-0 mt-0.5 sm:mt-0 ${
+                  notice.type === 'warning'
+                    ? 'bg-amber-500/20 text-amber-400'
+                    : notice.type === 'error'
+                    ? 'bg-rose-500/20 text-rose-400'
+                    : 'bg-emerald-500/20 text-emerald-400'
+                }`}
+              >
+                {notice.type === 'warning' ? (
+                  <AlertTriangle className="w-5 h-5" />
+                ) : notice.type === 'error' ? (
+                  <XCircle className="w-5 h-5" />
+                ) : (
+                  <CheckCircle2 className="w-5 h-5" />
+                )}
+              </div>
+              <div className="text-xs">
+                <p className="font-semibold">{notice.message}</p>
+                {notice.type === 'warning' && (
+                  <p className="text-[11px] text-amber-300/70 mt-0.5 font-mono">
+                    Los mods modificados o agregados requieren un reinicio completo del proceso del servidor para que NeoForge/Minecraft los aplique.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+              {notice.type === 'warning' && (
+                <GlassShimmerButton
+                  variant="amber"
+                  size="sm"
+                  onClick={handleQuickRestart}
+                  disabled={restarting}
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${restarting ? 'animate-spin' : ''}`} />
+                  <span>{restarting ? 'Reiniciando...' : 'Reiniciar Servidor'}</span>
+                </GlassShimmerButton>
+              )}
+              <motion.button
+                onClick={() => setNotice(null)}
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                className="p-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                title="Cerrar aviso"
+              >
+                <X className="w-4 h-4" />
+              </motion.button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Drag and Drop Zone */}
       <div
@@ -251,83 +413,92 @@ export const ModsView: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                filteredMods.map((mod) => (
-                  <tr key={mod.filename} className="hover:bg-slate-800/30 transition-colors group">
-                    <td className="p-3.5">
-                      {/* Toggle switch */}
-                      <button
-                        onClick={() => handleToggleMod(mod)}
-                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                          mod.isEnabled ? 'bg-emerald-500' : 'bg-slate-700'
-                        }`}
-                        title={mod.isEnabled ? 'Mod activo (.jar)' : 'Mod inactivo (.jar.disabled)'}
-                      >
-                        <span
-                          className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
-                            mod.isEnabled ? 'translate-x-4' : 'translate-x-0'
+                filteredMods.map((mod) => {
+                  const fileKey = mod.filename || mod.name;
+                  return (
+                    <tr key={fileKey} className="hover:bg-slate-800/30 transition-colors group">
+                      <td className="p-3.5">
+                        {/* Toggle switch */}
+                        <button
+                          onClick={() => handleToggleMod(mod)}
+                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                            mod.isEnabled ? 'bg-emerald-500' : 'bg-slate-700'
                           }`}
-                        />
-                      </button>
-                    </td>
-
-                    <td className="p-3.5">
-                      <div className="flex items-center gap-2.5">
-                        <div
-                          className={`p-1.5 rounded-lg ${
-                            mod.isEnabled
-                              ? 'bg-emerald-500/10 text-emerald-400'
-                              : 'bg-slate-800 text-slate-500'
-                          }`}
+                          title={mod.isEnabled ? 'Mod activo (.jar)' : 'Mod inactivo (.jar.disabled)'}
                         >
-                          <FileCheck className="w-4 h-4" />
-                        </div>
-                        <div>
                           <span
-                            className={`font-semibold text-xs block ${
-                              mod.isEnabled ? 'text-white' : 'text-slate-400 line-through'
+                            className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                              mod.isEnabled ? 'translate-x-4' : 'translate-x-0'
+                            }`}
+                          />
+                        </button>
+                      </td>
+
+                      <td className="p-3.5">
+                        <div className="flex items-center gap-2.5">
+                          <div
+                            className={`p-1.5 rounded-lg ${
+                              mod.isEnabled
+                                ? 'bg-emerald-500/10 text-emerald-400'
+                                : 'bg-slate-800 text-slate-500'
                             }`}
                           >
-                            {mod.name}
-                          </span>
-                          <span className="text-[11px] font-mono text-slate-500 block">
-                            {mod.filename}
-                          </span>
+                            <FileCheck className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <span
+                              className={`font-semibold text-xs block ${
+                                mod.isEnabled ? 'text-white' : 'text-slate-400 line-through'
+                              }`}
+                            >
+                              {mod.name}
+                            </span>
+                            {mod.filename && mod.filename !== mod.name && (
+                              <span className="text-[11px] font-mono text-slate-500 block">
+                                {mod.filename}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    </td>
+                      </td>
 
-                    <td className="p-3.5 font-mono text-slate-400 text-[11px]">
-                      {formatFileSize(mod.size)}
-                    </td>
+                      <td className="p-3.5 font-mono text-slate-400 text-[11px]">
+                        {formatFileSize(mod.size)}
+                      </td>
 
-                    <td className="p-3.5 font-mono text-slate-500 text-[11px]">
-                      {mod.modified}
-                    </td>
+                      <td className="p-3.5 font-mono text-slate-500 text-[11px]">
+                        {mod.modified}
+                      </td>
 
-                    <td className="p-3.5 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={() => {
-                            setModToRename(mod);
-                            setNewFilename(mod.filename);
-                          }}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-cyan-400 hover:bg-slate-800 transition-colors"
-                          title="Renombrar archivo"
-                        >
-                          <Edit3 className="w-3.5 h-3.5" />
-                        </button>
+                      <td className="p-3.5 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <motion.button
+                            onClick={() => {
+                              setModToRename(mod);
+                              setNewFilename(fileKey);
+                            }}
+                            whileHover={{ scale: 1.15 }}
+                            whileTap={{ scale: 0.9 }}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-cyan-400 hover:bg-slate-800 transition-colors cursor-pointer"
+                            title="Renombrar archivo"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </motion.button>
 
-                        <button
-                          onClick={() => setModToDelete(mod)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
-                          title="Eliminar mod"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                          <motion.button
+                            onClick={() => setModToDelete(mod)}
+                            whileHover={{ scale: 1.15 }}
+                            whileTap={{ scale: 0.9 }}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                            title="Eliminar mod"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </motion.button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -379,7 +550,7 @@ export const ModsView: React.FC = () => {
         <div className="space-y-4">
           <p className="text-xs text-slate-300">
             ¿Estás seguro de que deseas eliminar permanentemente{' '}
-            <strong className="text-rose-400 font-mono">{modToDelete?.filename}</strong>? Esta acción no se puede deshacer.
+            <strong className="text-rose-400 font-mono">{modToDelete?.filename || modToDelete?.name}</strong>? Esta acción no se puede deshacer.
           </p>
 
           <div className="flex justify-end gap-2 pt-2">

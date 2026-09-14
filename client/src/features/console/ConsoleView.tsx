@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { motion } from 'framer-motion';
 import { useConsoleWs } from './useConsoleWs';
 import { XtermTerminal } from './XtermTerminal';
 import {
@@ -18,16 +19,17 @@ export const ConsoleView: React.FC = () => {
   const [autoScroll, setAutoScroll] = useState(true);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const handleSend = async (e?: React.FormEvent) => {
+  const handleSend = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const trimmed = command.trim();
     if (!trimmed) return;
 
     // Add to history
-    setHistory((prev) => [trimmed, ...prev.filter((c) => c !== trimmed)].slice(0, 50));
+    setHistory((prev) => [...prev, trimmed]);
     setHistoryIndex(-1);
 
-    await sendCommand(trimmed);
+    // Send via WebSocket
+    sendCommand(trimmed);
     setCommand('');
   };
 
@@ -35,18 +37,19 @@ export const ConsoleView: React.FC = () => {
     if (e.key === 'ArrowUp') {
       e.preventDefault();
       if (history.length === 0) return;
-      const nextIndex = Math.min(historyIndex + 1, history.length - 1);
+      const nextIndex = historyIndex === -1 ? history.length - 1 : Math.max(0, historyIndex - 1);
       setHistoryIndex(nextIndex);
       setCommand(history[nextIndex]);
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
-      if (historyIndex > 0) {
-        const nextIndex = historyIndex - 1;
-        setHistoryIndex(nextIndex);
-        setCommand(history[nextIndex]);
-      } else if (historyIndex === 0) {
+      if (historyIndex === -1) return;
+      const nextIndex = historyIndex + 1;
+      if (nextIndex >= history.length) {
         setHistoryIndex(-1);
         setCommand('');
+      } else {
+        setHistoryIndex(nextIndex);
+        setCommand(history[nextIndex]);
       }
     }
   };
@@ -65,7 +68,7 @@ export const ConsoleView: React.FC = () => {
 
   const quickCommands = [
     { label: 'list', cmd: 'list' },
-    { label: 'tps', cmd: 'forge tps' },
+    { label: 'tps', cmd: 'neoforge tps' },
     { label: 'save-all', cmd: 'save-all' },
     { label: 'help', cmd: 'help' },
     { label: 'say ¡Hola!', cmd: 'say ¡Hola a todos en el servidor!' },
@@ -99,11 +102,13 @@ export const ConsoleView: React.FC = () => {
           </div>
         </div>
 
-        {/* Action icons */}
+        {/* Action icons with micro-interactions */}
         <div className="flex items-center gap-2">
-          <button
+          <motion.button
             onClick={() => setAutoScroll(!autoScroll)}
-            className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border flex items-center gap-1.5 transition-colors ${
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border flex items-center gap-1.5 transition-colors cursor-pointer ${
               autoScroll
                 ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
                 : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200'
@@ -112,25 +117,29 @@ export const ConsoleView: React.FC = () => {
           >
             <ArrowDown className={`w-3.5 h-3.5 ${autoScroll ? 'animate-bounce' : ''}`} />
             <span className="hidden md:inline">Auto-scroll</span>
-          </button>
+          </motion.button>
 
-          <button
+          <motion.button
             onClick={handleDownloadLogs}
-            className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs flex items-center gap-1.5 transition-colors"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
             title="Descargar logs actuales"
           >
             <Download className="w-3.5 h-3.5" />
             <span className="hidden md:inline">Descargar</span>
-          </button>
+          </motion.button>
 
-          <button
+          <motion.button
             onClick={clearLogs}
-            className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg bg-slate-800/80 hover:bg-rose-500/20 hover:text-rose-300 border border-slate-700 text-slate-300 text-xs flex items-center gap-1.5 transition-colors"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg bg-slate-800/80 hover:bg-rose-500/20 hover:text-rose-300 border border-slate-700 text-slate-300 text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
             title="Limpiar pantalla"
           >
             <Trash2 className="w-3.5 h-3.5" />
             <span className="hidden md:inline">Limpiar</span>
-          </button>
+          </motion.button>
         </div>
       </div>
 
@@ -139,17 +148,20 @@ export const ConsoleView: React.FC = () => {
         <XtermTerminal logs={logs} autoScroll={autoScroll} />
       </div>
 
-      {/* Quick command buttons */}
+      {/* Quick command buttons with tactile feedback */}
       <div className="flex items-center gap-1.5 overflow-x-auto py-1 shrink-0">
         <span className="text-[11px] text-slate-500 font-mono shrink-0 mr-1">Atajos:</span>
         {quickCommands.map((qc) => (
-          <button
+          <motion.button
             key={qc.label}
             onClick={() => sendCommand(qc.cmd)}
-            className="px-2.5 py-1 rounded-lg bg-dark-900 border border-slate-800 hover:border-emerald-500/40 text-slate-300 hover:text-emerald-400 text-[11px] font-mono transition-colors shrink-0"
+            whileHover={{ scale: 1.05, y: -1 }}
+            whileTap={{ scale: 0.94 }}
+            transition={{ type: 'spring', stiffness: 450, damping: 25 }}
+            className="px-2.5 py-1 rounded-lg bg-dark-900 border border-slate-800 hover:border-emerald-500/40 text-slate-300 hover:text-emerald-400 text-[11px] font-mono transition-colors shrink-0 cursor-pointer"
           >
             /{qc.cmd}
-          </button>
+          </motion.button>
         ))}
       </div>
 
@@ -173,14 +185,16 @@ export const ConsoleView: React.FC = () => {
           </div>
         </div>
 
-        <button
+        <motion.button
           type="submit"
           disabled={!command.trim()}
-          className="px-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-semibold flex items-center gap-1.5 transition-all shadow-md shadow-emerald-950/40"
+          whileHover={{ scale: command.trim() ? 1.02 : 1 }}
+          whileTap={{ scale: command.trim() ? 0.96 : 1 }}
+          className="px-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-semibold flex items-center gap-1.5 transition-all shadow-md shadow-emerald-950/40 cursor-pointer"
         >
           <Send className="w-3.5 h-3.5" />
           <span className="hidden sm:inline">Enviar</span>
-        </button>
+        </motion.button>
       </form>
     </div>
   );

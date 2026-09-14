@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
 
 interface ModalProps {
@@ -30,8 +31,6 @@ export const Modal: React.FC<ModalProps> = ({
     };
   }, [isOpen, onClose]);
 
-  if (!isOpen) return null;
-
   const maxWidthClasses = {
     sm: 'max-w-sm',
     md: 'max-w-md',
@@ -40,29 +39,44 @@ export const Modal: React.FC<ModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 bg-black/75 backdrop-blur-sm transition-opacity"
-        onClick={onClose}
-      />
-
-      {/* Dialog box */}
-      <div
-        className={`relative w-full ${maxWidthClasses[maxWidth]} bg-dark-900 border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden z-10 animate-scaleUp`}
-      >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800 bg-dark-950/50">
-          <h3 className="text-sm font-semibold text-white tracking-wide">{title}</h3>
-          <button
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <motion.div
+            className="fixed inset-0 bg-black/80 backdrop-blur-md"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+          />
 
-        <div className="p-5 max-h-[80vh] overflow-y-auto">{children}</div>
-      </div>
-    </div>
+          {/* Dialog box with spring physics */}
+          <motion.div
+            className={`relative w-full ${maxWidthClasses[maxWidth]} bg-dark-900 border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden z-10`}
+            initial={{ opacity: 0, scale: 0.94, y: 14 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.94, y: 14 }}
+            transition={{ type: 'spring', damping: 26, stiffness: 360 }}
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800 bg-dark-950/60">
+              <h3 className="text-sm font-semibold text-white tracking-wide font-mono">{title}</h3>
+              <motion.button
+                onClick={onClose}
+                whileHover={{ scale: 1.1, rotate: 90 }}
+                whileTap={{ scale: 0.9 }}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                title="Cerrar modal"
+              >
+                <X className="w-4 h-4" />
+              </motion.button>
+            </div>
+
+            <div className="p-5 max-h-[80vh] overflow-y-auto">{children}</div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
   );
 };

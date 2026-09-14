@@ -98,23 +98,302 @@ export class VersionsService {
       this.cacheTimestamp = now;
       return allVersions;
     } catch (err) {
-      console.warn('Could not fetch NeoForge versions from Maven, using cached or fallback:', err);
+      console.warn('Could not fetch NeoForge versions from Maven, reading disk versions:', err);
       if (this.cachedNeoForgeVersions) return this.cachedNeoForgeVersions;
-      return ['21.1.250', '21.1.249', '21.1.65', '21.4.157', '20.4.251'];
+      // No mock arrays: return versions discovered on disk
+      const local = this.detectServerFromDisk();
+      return local.versions.map((v) => v.version);
     }
+  }
+
+  /**
+   * Deterministically map a NeoForge version string to its matching Minecraft version
+   * NeoForge official semantic schema:
+   * 21.1.x -> 1.21.1
+   * 21.4.x -> 1.21.4
+   * 21.0.x -> 1.21
+   * 20.4.x -> 1.20.4
+   * 20.6.x -> 1.20.6
+   * 20.2.x -> 1.20.2
+   * X.Y.Z  -> 1.X.Y (if Y is 0 -> 1.X)
+   */
+  public mapNeoForgeToMinecraftVersion(neoVer: string): string | null {
+    if (!neoVer) return null;
+    const clean = neoVer.replace(/[^0-9.]/g, '');
+    const parts = clean.split('.');
+    if (parts.length >= 2) {
+      const major = parts[0];
+      const minor = parts[1];
+      if (minor === '0') {
+        return `1.${major}`;
+      }
+      return `1.${major}.${minor}`;
+    }
+    return null;
+  }
+
+  /**
+   * Autodetects the Minecraft and NeoForge/Engine versions directly from the server root directory on disk
+   * without using mock data or fabricated responses.
+   */
+  public detectServerFromDisk(): {
+    installed: boolean;
+    serverDir: string;
+    mcVersion: string | null;
+    loader: 'neoforge' | 'forge' | 'vanilla' | 'custom' | null;
+    loaderVersion: string | null;
+    activeVersion: string | null;
+    versions: Array<{
+      version: string;
+      mcVersion?: string;
+      isInstalled: boolean;
+      isActive: boolean;
+      hasUnixArgs?: boolean;
+      hasInstallerJar?: boolean;
+      jarFileName?: string;
+      source: string;
+      modified?: string;
+    }>;
+    eulaAccepted: boolean;
+    serverJarFound: boolean;
+    runScriptFound: boolean;
+    formattedVersion: string;
+  } {
+    const serverDir = this.configService.resolvePath(SUBDIRS.SERVER);
+    const discovered: Record<string, any> = {};
+
+    let detectedMcFromLibs: string | null = null;
+    let detectedMcFromMcLibs: string | null = null;
+    let detectedNeoFromLogs: string | null = null;
+    let detectedMcFromLogs: string | null = null;
+
+    // 1. Check active-version.json if present
+    let activeVersion: string | null = null;
+    const activeFile = path.join(serverDir, 'active-version.json');
+    if (fs.existsSync(activeFile)) {
+      try {
+        const data = JSON.parse(fs.readFileSync(activeFile, 'utf-8'));
+        if (data.activeNeoForgeVersion) {
+          activeVersion = data.activeNeoForgeVersion;
+        }
+      } catch {}
+    }
+
+    // 2. Check start.sh or run.sh to see which version is actively configured to run
+    const scriptsStart = this.configService.resolvePath(SUBDIRS.START_SCRIPT);
+    const runSh = path.join(serverDir, 'run.sh');
+    for (const scriptPath of [scriptsStart, runSh]) {
+      if (fs.existsSync(scriptPath)) {
+        try {
+          const content = fs.readFileSync(scriptPath, 'utf-8');
+          const match = content.match(/libraries\/net\/neoforged\/neoforge\/([0-9a-zA-Z._-]+)\/unix_args\.txt/);
+          if (match && match[1] && !activeVersion) {
+            activeVersion = match[1];
+          }
+        } catch {}
+      }
+    }
+
+    // 3. Scan libraries/net/neoforged/neoforge/<version>
+    const neoForgeLibsDir = path.join(serverDir, 'libraries', 'net', 'neoforged', 'neoforge');
+    if (fs.existsSync(neoForgeLibsDir)) {
+      try {
+        const dirs = fs.readdirSync(neoForgeLibsDir, { withFileTypes: true });
+        for (const d of dirs) {
+          if (d.isDirectory()) {
+            const ver = d.name;
+            const unixArgsPath = path.join(neoForgeLibsDir, ver, 'unix_args.txt');
+            const hasUnixArgs = fs.existsSync(unixArgsPath);
+            const stat = fs.statSync(path.join(neoForgeLibsDir, ver));
+
+            let deducedMc = this.mapNeoForgeToMinecraftVersion(ver);
+            if (hasUnixArgs) {
+              try {
+                const argsContent = fs.readFileSync(unixArgsPath, 'utf-8');
+                const mcMatch =
+                  argsContent.match(/--fml\.mcVersion\s+([0-9.]+)/) ||
+                  argsContent.match(/minecraft\/server\/([0-9.]+)\/server-/);
+                if (mcMatch && mcMatch[1]) {
+                  deducedMc = mcMatch[1];
+                }
+              } catch {}
+            }
+
+            if (deducedMc && !detectedMcFromLibs) {
+              detectedMcFromLibs = deducedMc;
+            }
+
+            discovered[ver] = {
+              version: ver,
+              mcVersion: deducedMc || undefined,
+              isInstalled: true,
+              hasUnixArgs,
+              source: 'libraries',
+              modified: stat.mtime.toISOString(),
+            };
+          }
+        }
+      } catch {}
+    }
+
+    // 4. Scan libraries/net/minecraft/server/<mcVersion>
+    const mcLibsDir = path.join(serverDir, 'libraries', 'net', 'minecraft', 'server');
+    if (fs.existsSync(mcLibsDir)) {
+      try {
+        const dirs = fs.readdirSync(mcLibsDir, { withFileTypes: true });
+        for (const d of dirs) {
+          if (d.isDirectory() && /^[0-9.]+$/.test(d.name)) {
+            detectedMcFromMcLibs = d.name;
+            break;
+          }
+        }
+      } catch {}
+    }
+
+    // 5. Scan root of server for jar files (neoforge, forge, vanilla)
+    let serverJarFound = false;
+    if (fs.existsSync(serverDir)) {
+      try {
+        const files = fs.readdirSync(serverDir);
+        for (const f of files) {
+          if (f.toLowerCase().endsWith('.jar')) {
+            serverJarFound = true;
+            const neoMatch = f.match(/neoforge-([0-9a-zA-Z._-]+?)(?:-installer)?\.jar/i);
+            if (neoMatch && neoMatch[1]) {
+              const ver = neoMatch[1];
+              const stat = fs.statSync(path.join(serverDir, f));
+              const deducedMc = this.mapNeoForgeToMinecraftVersion(ver);
+              discovered[ver] = {
+                ...(discovered[ver] || {}),
+                version: ver,
+                mcVersion: discovered[ver]?.mcVersion || deducedMc || undefined,
+                hasInstallerJar: f.includes('installer'),
+                jarFileName: f,
+                modified: stat.mtime.toISOString(),
+                source: discovered[ver]?.source || 'jar_file',
+              };
+            }
+          }
+        }
+      } catch {}
+    }
+
+    // 6. Scan logs/latest.log for telemetry on previous boots
+    const latestLogPath = path.join(serverDir, 'logs', 'latest.log');
+    if (fs.existsSync(latestLogPath)) {
+      try {
+        const content = fs.readFileSync(latestLogPath, 'utf-8');
+        const neoMatch = content.match(/NeoForge Version:\s*([0-9.]+)/i);
+        if (neoMatch && neoMatch[1]) detectedNeoFromLogs = neoMatch[1];
+        const mcMatch = content.match(/(?:Minecraft Version:\s*([0-9.]+)|Starting minecraft server version\s*([0-9.]+))/i);
+        if (mcMatch) detectedMcFromLogs = mcMatch[1] || mcMatch[2];
+      } catch {}
+    }
+
+    // 7. Check EULA & scripts
+    let eulaAccepted = false;
+    const eulaPath = path.join(serverDir, 'eula.txt');
+    if (fs.existsSync(eulaPath)) {
+      try {
+        eulaAccepted = fs.readFileSync(eulaPath, 'utf-8').toLowerCase().includes('eula=true');
+      } catch {}
+    }
+
+    const runScriptFound =
+      fs.existsSync(scriptsStart) ||
+      fs.existsSync(runSh) ||
+      fs.existsSync(path.join(serverDir, 'start.sh'));
+
+    const versionList = Object.values(discovered);
+    // Sort descending by semantic version
+    versionList.sort((a: any, b: any) => {
+      const numsA = a.version.replace(/[^0-9.]/g, '').split('.').map(Number);
+      const numsB = b.version.replace(/[^0-9.]/g, '').split('.').map(Number);
+      for (let i = 0; i < Math.max(numsA.length, numsB.length); i++) {
+        const diff = (numsB[i] || 0) - (numsA[i] || 0);
+        if (diff !== 0) return diff;
+      }
+      return b.version.localeCompare(a.version);
+    });
+
+    if (!activeVersion && versionList.length > 0) {
+      const topVer = versionList[0].version;
+      if (topVer) {
+        activeVersion = topVer;
+        try {
+          this.setActiveNeoForgeVersion(topVer);
+        } catch {}
+      }
+    }
+
+    const versionsWithActive = versionList.map((item: any) => ({
+      ...item,
+      isActive: item.version === activeVersion,
+    }));
+
+    // Primary detected NeoForge version
+    const primaryNeoVersion = activeVersion || (versionList.length > 0 ? versionList[0].version : null) || detectedNeoFromLogs;
+
+    // Primary detected Minecraft version
+    let primaryMcVersion =
+      detectedMcFromMcLibs ||
+      detectedMcFromLogs ||
+      (primaryNeoVersion ? this.mapNeoForgeToMinecraftVersion(primaryNeoVersion) : null) ||
+      detectedMcFromLibs;
+
+    // Also check version-info.json for fallback if disk didn't specify mcVersion
+    const versionInfoPath = path.join(serverDir, 'version-info.json');
+    if (fs.existsSync(versionInfoPath)) {
+      try {
+        const meta = JSON.parse(fs.readFileSync(versionInfoPath, 'utf-8'));
+        if (meta.mcVersion && !primaryMcVersion) primaryMcVersion = meta.mcVersion;
+      } catch {}
+    }
+
+    const isInstalled =
+      versionList.length > 0 ||
+      serverJarFound ||
+      runScriptFound ||
+      Boolean(detectedMcFromLibs || detectedMcFromMcLibs);
+
+    let loader: 'neoforge' | 'forge' | 'vanilla' | 'custom' | null = null;
+    if (versionList.length > 0 || primaryNeoVersion) {
+      loader = 'neoforge';
+    } else if (serverJarFound || runScriptFound) {
+      loader = 'vanilla';
+    }
+
+    let formattedVersion = '';
+    if (isInstalled) {
+      if (primaryMcVersion && primaryNeoVersion) {
+        formattedVersion = `Minecraft ${primaryMcVersion} (NeoForge ${primaryNeoVersion})`;
+      } else if (primaryMcVersion) {
+        formattedVersion = `Minecraft ${primaryMcVersion} (${loader === 'neoforge' ? 'NeoForge' : 'Vanilla'})`;
+      } else if (primaryNeoVersion) {
+        formattedVersion = `NeoForge ${primaryNeoVersion}`;
+      } else {
+        formattedVersion = 'Minecraft Servidor';
+      }
+    }
+
+    return {
+      installed: isInstalled,
+      serverDir,
+      mcVersion: primaryMcVersion || null,
+      loader,
+      loaderVersion: primaryNeoVersion || null,
+      activeVersion,
+      versions: versionsWithActive,
+      eulaAccepted,
+      serverJarFound,
+      runScriptFound,
+      formattedVersion,
+    };
   }
 
   public async getNeoForgeVersions(mcVersion: string): Promise<string[]> {
     const allVersions = await this.fetchAllNeoForgeVersions();
 
-    // Map MC version to NeoForge prefix:
-    // In NeoForge official numbering:
-    // Minecraft 1.21.1 -> NeoForge 21.1.x
-    // Minecraft 1.21.4 -> NeoForge 21.4.x
-    // Minecraft 1.21.0 / 1.21 -> NeoForge 21.0.x
-    // Minecraft 1.20.4 -> NeoForge 20.4.x
-    // Minecraft 1.20.6 -> NeoForge 20.6.x
-    // Minecraft 1.20.2 -> NeoForge 20.2.x
     const parts = mcVersion.split('.');
     if (parts.length < 2) return [];
 
@@ -137,47 +416,34 @@ export class VersionsService {
   }
 
   public getInstalledVersion(): InstalledVersionInfo {
-    const serverDir = this.configService.resolvePath(SUBDIRS.SERVER);
+    const detection = this.detectServerFromDisk();
+    const serverDir = detection.serverDir;
     const versionInfoPath = path.join(serverDir, 'version-info.json');
-    const eulaPath = this.configService.resolvePath(SUBDIRS.EULA);
-    const startScriptPath = this.configService.resolvePath(SUBDIRS.START_SCRIPT);
-    const runShPath = path.join(serverDir, 'run.sh');
-    const serverJarPath = path.join(serverDir, 'server.jar');
 
-    let eulaAccepted = false;
-    if (fs.existsSync(eulaPath)) {
-      try {
-        const eulaContent = fs.readFileSync(eulaPath, 'utf-8');
-        eulaAccepted = eulaContent.toLowerCase().includes('eula=true');
-      } catch {}
-    }
-
-    const runScriptFound = fs.existsSync(startScriptPath) || fs.existsSync(runShPath);
-    const serverJarFound = fs.existsSync(serverJarPath) || fs.existsSync(path.join(serverDir, 'run.jar'));
-
+    let meta: any = null;
     if (fs.existsSync(versionInfoPath)) {
       try {
-        const meta = JSON.parse(fs.readFileSync(versionInfoPath, 'utf-8'));
-        return {
-          installed: true,
-          mcVersion: meta.mcVersion,
-          loader: meta.loader,
-          loaderVersion: meta.loaderVersion,
-          javaVersion: meta.javaVersion,
-          allocatedRamMin: meta.ramMin,
-          allocatedRamMax: meta.ramMax,
-          eulaAccepted,
-          serverJarFound,
-          runScriptFound,
-        };
+        meta = JSON.parse(fs.readFileSync(versionInfoPath, 'utf-8'));
       } catch {}
     }
 
+    const mcVersion = meta?.mcVersion || detection.mcVersion || undefined;
+    const loader = (meta?.loader || detection.loader || 'neoforge') as 'neoforge' | 'forge' | 'vanilla' | 'custom';
+    const loaderVersion = meta?.loaderVersion || detection.loaderVersion || undefined;
+
     return {
-      installed: runScriptFound || serverJarFound,
-      eulaAccepted,
-      serverJarFound,
-      runScriptFound,
+      installed: detection.installed,
+      mcVersion,
+      loader,
+      loaderVersion,
+      javaVersion: meta?.javaVersion || 'Java 21',
+      allocatedRamMin: meta?.ramMin || '4G',
+      allocatedRamMax: meta?.ramMax || '8G',
+      eulaAccepted: detection.eulaAccepted,
+      serverJarFound: detection.serverJarFound,
+      runScriptFound: detection.runScriptFound,
+      serverDir: detection.serverDir,
+      formattedVersion: detection.formattedVersion || undefined,
     };
   }
 
@@ -230,7 +496,15 @@ export class VersionsService {
   }
 
   private async installNeoForge(options: InstallOptions, serverDir: string, scriptsDir: string): Promise<void> {
-    const loaderVer = options.loaderVersion || '21.1.65';
+    let loaderVer = options.loaderVersion;
+    if (!loaderVer || loaderVer === 'latest' || loaderVer.includes('Recomendada')) {
+      const builds = await this.getNeoForgeVersions(options.mcVersion);
+      if (builds.length > 0) {
+        loaderVer = builds[0];
+      } else {
+        throw new Error(`No se encontró ninguna build de NeoForge disponible para Minecraft ${options.mcVersion}`);
+      }
+    }
     const installerUrl = `https://maven.neoforged.net/releases/net/neoforged/neoforge/${loaderVer}/neoforge-${loaderVer}-installer.jar`;
     const installerPath = path.join(serverDir, `neoforge-${loaderVer}-installer.jar`);
 
@@ -354,94 +628,18 @@ exec java -Xms${ramMin} -Xmx${ramMax} -XX:+UseG1GC -XX:+ParallelRefProcEnabled -
     fs.writeFileSync(startScriptPath, startScriptContent, { mode: 0o755 });
   }
 
-  public getLocalNeoForgeVersions(): { versions: any[]; activeVersion: string | null } {
-    const serverDir = this.configService.resolvePath(SUBDIRS.SERVER);
-    const discovered: Record<string, any> = {};
-
-    // 1. Check libraries/net/neoforged/neoforge/<version>
-    const neoForgeLibsDir = path.join(serverDir, 'libraries', 'net', 'neoforged', 'neoforge');
-    if (fs.existsSync(neoForgeLibsDir)) {
-      try {
-        const dirs = fs.readdirSync(neoForgeLibsDir, { withFileTypes: true });
-        for (const d of dirs) {
-          if (d.isDirectory()) {
-            const ver = d.name;
-            const hasUnixArgs = fs.existsSync(path.join(neoForgeLibsDir, ver, 'unix_args.txt'));
-            const stat = fs.statSync(path.join(neoForgeLibsDir, ver));
-            discovered[ver] = {
-              version: ver,
-              isInstalled: true,
-              hasUnixArgs,
-              source: 'libraries',
-              modified: stat.mtime.toISOString(),
-            };
-          }
-        }
-      } catch {}
-    }
-
-    // 2. Check root of server for neoforge-*.jar or installers
-    if (fs.existsSync(serverDir)) {
-      try {
-        const files = fs.readdirSync(serverDir);
-        for (const f of files) {
-          const match = f.match(/neoforge-([0-9a-zA-Z._-]+?)(?:-installer)?\.jar/i);
-          if (match && match[1]) {
-            const ver = match[1];
-            const stat = fs.statSync(path.join(serverDir, f));
-            discovered[ver] = {
-              ...(discovered[ver] || {}),
-              version: ver,
-              hasInstallerJar: f.includes('installer'),
-              jarFileName: f,
-              modified: stat.mtime.toISOString(),
-              source: discovered[ver]?.source || 'jar_file',
-            };
-          }
-        }
-      } catch {}
-    }
-
-    // 3. Read active version from active-version.json or version-info.json
-    let activeVersion: string | null = null;
-    const activeFile = path.join(serverDir, 'active-version.json');
-    if (fs.existsSync(activeFile)) {
-      try {
-        const data = JSON.parse(fs.readFileSync(activeFile, 'utf-8'));
-        activeVersion = data.activeNeoForgeVersion || null;
-      } catch {}
-    }
-
-    const versionList = Object.values(discovered);
-
-    // Natural sort descending (newest build first)
-    versionList.sort((a: any, b: any) => {
-      const numsA = a.version.replace(/[^0-9.]/g, '').split('.').map(Number);
-      const numsB = b.version.replace(/[^0-9.]/g, '').split('.').map(Number);
-      for (let i = 0; i < Math.max(numsA.length, numsB.length); i++) {
-        const diff = (numsB[i] || 0) - (numsA[i] || 0);
-        if (diff !== 0) return diff;
-      }
-      return b.version.localeCompare(a.version);
-    });
-
-    // If no active version is set and we found versions, default to the latest
-    if (!activeVersion && versionList.length > 0) {
-      const defaultVer = versionList[0].version;
-      if (defaultVer) {
-        activeVersion = defaultVer;
-        this.setActiveNeoForgeVersion(defaultVer);
-      }
-    }
-
-    const versionsWithActive = versionList.map((item: any) => ({
-      ...item,
-      isActive: item.version === activeVersion,
-    }));
-
+  public getLocalNeoForgeVersions(): {
+    versions: any[];
+    activeVersion: string | null;
+    serverDir: string;
+    detectedMinecraftVersion: string | null;
+  } {
+    const detection = this.detectServerFromDisk();
     return {
-      versions: versionsWithActive,
-      activeVersion,
+      versions: detection.versions,
+      activeVersion: detection.activeVersion,
+      serverDir: detection.serverDir,
+      detectedMinecraftVersion: detection.mcVersion,
     };
   }
 
@@ -482,15 +680,12 @@ fi
     if (!fs.existsSync(serverDir)) fs.mkdirSync(serverDir, { recursive: true });
 
     // Extract version from file name (e.g. neoforge-21.1.20-installer.jar -> 21.1.20)
-    let version = 'custom';
-    const match = originalName.match(/neoforge-([0-9a-zA-Z._-]+?)(?:-installer)?\.jar/i);
+    let version = '';
+    const match = originalName.match(/(?:neoforge|forge)-([0-9a-zA-Z._-]+?)(?:-installer)?\.jar/i);
     if (match && match[1]) {
       version = match[1];
     } else {
-      const genMatch = originalName.match(/([0-9]+\.[0-9]+(?:\.[0-9]+)?)/);
-      if (genMatch && genMatch[1]) {
-        version = genMatch[1];
-      }
+      throw new Error(`El archivo "${originalName}" no es un instalador o servidor reconocido de NeoForge (ej: neoforge-21.1.65-installer.jar)`);
     }
 
     this.emitLog(`Procesando archivo subido: ${originalName} (Versión detectada: ${version})...`);

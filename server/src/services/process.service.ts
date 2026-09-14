@@ -47,7 +47,7 @@ export class ProcessService {
     }
 
     const root = this.configService.getRootPath();
-    const serverDir = path.join(root, SUBDIRS.SERVER);
+    const serverDir = this.configService.getServerDir();
     const startScript = path.join(root, SUBDIRS.START_SCRIPT);
     const runSh = path.join(serverDir, 'run.sh');
     const serverJar = path.join(serverDir, 'server.jar');

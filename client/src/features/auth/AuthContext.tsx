@@ -21,17 +21,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
   useEffect(() => {
+    const handleUnauthorized = () => {
+      setIsAuthenticated(false);
+      setUsername(null);
+    };
+    window.addEventListener('mc_auth_unauthorized', handleUnauthorized);
+
     // Verify session
     api.getMe()
       .then((res) => {
         if (res.isAuthenticated) {
           setIsAuthenticated(true);
           setUsername(res.username);
+        } else {
+          setIsAuthenticated(false);
+          setUsername(null);
+          localStorage.removeItem('mc_auth_token');
+          localStorage.removeItem('mc_auth_user');
         }
       })
       .catch(() => {
-        // Fallback to existing local token if valid
+        setIsAuthenticated(false);
+        setUsername(null);
+        localStorage.removeItem('mc_auth_token');
+        localStorage.removeItem('mc_auth_user');
       });
+
+    return () => {
+      window.removeEventListener('mc_auth_unauthorized', handleUnauthorized);
+    };
   }, []);
 
   const login = async (password: string) => {

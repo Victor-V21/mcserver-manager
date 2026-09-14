@@ -19,7 +19,7 @@ router.get('/', async (_req: Request, res: Response) => {
       status: 'offline',
       pid: null,
       uptime: 0,
-      version: 'NeoForge',
+      version: null,
       cpu: { host: 0, java: 0 },
       hostCpu: 0,
       ram: { used: 0, total: 8192, percent: 0, maxAllocated: 8192 },

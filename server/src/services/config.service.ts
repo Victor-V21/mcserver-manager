@@ -88,7 +88,44 @@ export class ConfigService {
     return this.config.rootPath;
   }
 
+  public getServerDir(): string {
+    const root = this.config.rootPath;
+    const standardServerDir = path.join(root, SUBDIRS.SERVER);
+
+    // 1. If host has /server directly and it contains files or is a directory with items
+    if (fs.existsSync('/server') && fs.statSync('/server').isDirectory()) {
+      try {
+        const files = fs.readdirSync('/server');
+        if (files.length > 0) return '/server';
+      } catch {}
+    }
+
+    // 2. If standard <rootPath>/server exists, use it
+    if (fs.existsSync(standardServerDir)) {
+      return standardServerDir;
+    }
+
+    // 3. If root itself contains server files (e.g. libraries, server.properties, run.sh, eula.txt)
+    const indicators = ['server.properties', 'libraries', 'run.sh', 'eula.txt', 'version-info.json'];
+    const hasIndicators = indicators.some((f) => fs.existsSync(path.join(root, f)));
+    if (hasIndicators) {
+      return root;
+    }
+
+    return standardServerDir;
+  }
+
   public resolvePath(...subpaths: string[]): string {
+    if (subpaths.length > 0) {
+      const fullSubpath = path.join(...subpaths);
+      if (fullSubpath === 'server' || fullSubpath === SUBDIRS.SERVER) {
+        return this.getServerDir();
+      }
+      if (fullSubpath.startsWith('server' + path.sep) || fullSubpath.startsWith('server/')) {
+        const rel = fullSubpath.slice(7); // strip 'server/'
+        return path.resolve(this.getServerDir(), rel);
+      }
+    }
     return path.resolve(this.config.rootPath, ...subpaths);
   }
 

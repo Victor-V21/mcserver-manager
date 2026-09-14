@@ -85,6 +85,9 @@ export const Topbar: React.FC<TopbarProps> = ({
           <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-emerald-300 text-xs font-mono">
             <RareTpsIcon size={15} />
             <span>{telemetry.tps.current} TPS</span>
+            {telemetry.tps.avgTickMs !== undefined && (
+              <span className="text-emerald-400/80 text-[11px] pl-0.5">({telemetry.tps.avgTickMs} ms)</span>
+            )}
           </div>
         )}
 

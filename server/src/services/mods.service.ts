@@ -44,6 +44,7 @@ export class ModsService {
           if (stats.isFile()) {
             mods.push({
               name: file,
+              filename: file,
               size: stats.size,
               modified: stats.mtime.toISOString(),
               isEnabled: file.endsWith('.jar'),
@@ -62,12 +63,20 @@ export class ModsService {
   }
 
   public toggleMod(filename: string, enable: boolean): { success: boolean; newName: string } {
-    const safeName = path.basename(filename);
+    let safeName = path.basename(filename);
     const dir = this.getModsDir();
-    const currentPath = path.join(dir, safeName);
+    let currentPath = path.join(dir, safeName);
 
     if (!fs.existsSync(currentPath)) {
-      throw new Error(`Mod file "${safeName}" not found`);
+      if (safeName.endsWith('.disabled') && fs.existsSync(path.join(dir, safeName.slice(0, -'.disabled'.length)))) {
+        safeName = safeName.slice(0, -'.disabled'.length);
+        currentPath = path.join(dir, safeName);
+      } else if (!safeName.endsWith('.disabled') && fs.existsSync(path.join(dir, `${safeName}.disabled`))) {
+        safeName = `${safeName}.disabled`;
+        currentPath = path.join(dir, safeName);
+      } else {
+        throw new Error(`Mod file "${safeName}" not found`);
+      }
     }
 
     let newName = safeName;

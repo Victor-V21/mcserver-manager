@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { motion, AnimatePresence } from 'framer-motion';
 import { api } from './lib/api';
 import { useAuth } from './features/auth/AuthContext';
 import { LoginView } from './features/auth/LoginView';
@@ -29,7 +30,7 @@ export const App: React.FC = () => {
 
   // Playit status query (polls every 6 seconds)
   const { data: playit } = useQuery({
-    queryKey: ['playitStatus'],
+    queryKey: ['playit'],
     queryFn: api.getPlayitStatus,
     refetchInterval: 6000,
     enabled: isAuthenticated,
@@ -37,13 +38,16 @@ export const App: React.FC = () => {
 
   // Server Action mutation
   const serverActionMutation = useMutation({
-    mutationFn: (action: 'start' | 'stop' | 'restart' | 'kill') => api.executeServerAction(action),
+    mutationFn: (action: 'start' | 'stop' | 'restart' | 'kill') =>
+      api.executeServerAction(action),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['telemetry'] });
     },
   });
 
-  const handleServerAction = async (action: 'start' | 'stop' | 'restart' | 'kill') => {
+  const handleServerAction = async (
+    action: 'start' | 'stop' | 'restart' | 'kill'
+  ) => {
     await serverActionMutation.mutateAsync(action);
   };
 
@@ -53,17 +57,15 @@ export const App: React.FC = () => {
   };
 
   const handleBanPlayer = async (name: string, reason?: string) => {
-    // Kick and record ban
     await api.kickPlayer(name, reason);
     queryClient.invalidateQueries({ queryKey: ['telemetry'] });
     queryClient.invalidateQueries({ queryKey: ['bans'] });
   };
 
   const handleToggleOp = async (name: string, isOp: boolean) => {
-    if (isOp) {
+    if (!isOp) {
       await api.addOp(name, 4);
     } else {
-      // Find UUID
       const ops = await api.getOps();
       const op = ops.find((o) => o.name.toLowerCase() === name.toLowerCase());
       if (op) {
@@ -86,33 +88,44 @@ export const App: React.FC = () => {
       playit={playit || null}
       onServerAction={handleServerAction}
     >
-      {currentTab === 'dashboard' && (
-        <DashboardView
-          telemetry={telemetry || null}
-          playit={playit || null}
-          onServerAction={handleServerAction}
-          onNavigateTab={setCurrentTab}
-          onKickPlayer={handleKickPlayer}
-          onBanPlayer={handleBanPlayer}
-          onToggleOp={handleToggleOp}
-        />
-      )}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={currentTab}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -8 }}
+          transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+          className="w-full"
+        >
+          {currentTab === 'dashboard' && (
+            <DashboardView
+              telemetry={telemetry || null}
+              playit={playit || null}
+              onServerAction={handleServerAction}
+              onNavigateTab={setCurrentTab}
+              onKickPlayer={handleKickPlayer}
+              onBanPlayer={handleBanPlayer}
+              onToggleOp={handleToggleOp}
+            />
+          )}
 
-      {currentTab === 'versions' && <VersionsView />}
+          {currentTab === 'versions' && <VersionsView />}
 
-      {currentTab === 'console' && <ConsoleView />}
+          {currentTab === 'console' && <ConsoleView />}
 
-      {currentTab === 'properties' && <PropertiesView />}
+          {currentTab === 'properties' && <PropertiesView />}
 
-      {currentTab === 'players' && <PlayersView />}
+          {currentTab === 'players' && <PlayersView />}
 
-      {currentTab === 'mods' && <ModsView />}
+          {currentTab === 'mods' && <ModsView />}
 
-      {currentTab === 'files' && <FilesView />}
+          {currentTab === 'files' && <FilesView />}
 
-      {currentTab === 'playit' && <PlayitView />}
+          {currentTab === 'playit' && <PlayitView />}
 
-      {currentTab === 'settings' && <SettingsView />}
+          {currentTab === 'settings' && <SettingsView />}
+        </motion.div>
+      </AnimatePresence>
     </MainLayout>
   );
 };

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { api } from '../../lib/api';
 import {
   LocalNeoForgeItem,
@@ -19,7 +19,53 @@ import {
   Check,
   Zap,
   Info,
+  Copy,
+  Search,
+  Coffee,
+  Boxes,
 } from 'lucide-react';
+
+/**
+ * Returns runtime requirements and compatibility recommendations for a given Minecraft version.
+ */
+function getCompatibilityInfo(mcVersion?: string | null) {
+  if (!mcVersion) {
+    return {
+      java: 'Java 21 LTS',
+      javaRequired: 'Java 21 LTS (Recomendada)',
+      modsDirNotice: 'Los mods deben coincidir con la versión activa de Minecraft',
+    };
+  }
+
+  const parts = mcVersion.split('.');
+  const minor = parseInt(parts[1] || '0', 10);
+  const patch = parseInt(parts[2] || '0', 10);
+
+  if (minor >= 21 || (minor === 20 && patch >= 5)) {
+    return {
+      java: 'Java 21 LTS',
+      javaRequired: 'Requiere OpenJDK 21 LTS',
+      modsDirNotice: `Mods compatibles con Minecraft ${mcVersion}`,
+    };
+  } else if (minor >= 18) {
+    return {
+      java: 'Java 17 LTS',
+      javaRequired: 'Requiere OpenJDK 17 LTS',
+      modsDirNotice: `Mods compatibles con Minecraft ${mcVersion}`,
+    };
+  } else if (minor === 17) {
+    return {
+      java: 'Java 16',
+      javaRequired: 'Requiere Java 16',
+      modsDirNotice: `Mods compatibles con Minecraft ${mcVersion}`,
+    };
+  }
+  return {
+    java: 'Java 8 LTS',
+    javaRequired: 'Requiere Java 8 LTS',
+    modsDirNotice: `Mods compatibles con Minecraft ${mcVersion}`,
+  };
+}
 
 export const VersionsView: React.FC = () => {
   const [engineTab, setEngineTab] = useState<'neoforge' | 'minecraft'>('neoforge');
@@ -28,12 +74,20 @@ export const VersionsView: React.FC = () => {
   const [localNeoForge, setLocalNeoForge] = useState<{
     versions: LocalNeoForgeItem[];
     activeVersion: string | null;
+    serverDir?: string;
+    detectedMinecraftVersion?: string | null;
   }>({ versions: [], activeVersion: null });
   const [loadingLocal, setLoadingLocal] = useState(true);
   const [activatingVersion, setActivatingVersion] = useState<string | null>(null);
 
-  // File Upload State
+  // Search & Filter state
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // File Upload & Drag-and-Drop State
   const [uploadingJar, setUploadingJar] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ fileName: string; size: string } | null>(null);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const dragCounterRef = useRef(0);
   const [uploadMessage, setUploadMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -47,6 +101,7 @@ export const VersionsView: React.FC = () => {
   const [acceptEula, setAcceptEula] = useState(true);
   const [installingVanilla, setInstallingVanilla] = useState(false);
   const [consoleOutput, setConsoleOutput] = useState<string | null>(null);
+  const [copiedConsole, setCopiedConsole] = useState(false);
   const [executingCommand, setExecutingCommand] = useState(false);
 
   useEffect(() => {
@@ -99,7 +154,7 @@ export const VersionsView: React.FC = () => {
       await loadInstalledMetadata();
       setUploadMessage({
         type: 'success',
-        text: `¡Versión NeoForge ${version} activada con éxito en scripts/start.sh!`,
+        text: `Versión NeoForge ${version} activada con éxito en scripts/start.sh.`,
       });
     } catch (err: any) {
       setUploadMessage({
@@ -111,35 +166,81 @@ export const VersionsView: React.FC = () => {
     }
   };
 
-  const handleJarFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  // Shared file processor for input change and drag-and-drop
+  const processJarUpload = async (file: File) => {
     if (!file.name.endsWith('.jar')) {
-      alert('Solo se admiten archivos con extensión .jar');
+      setUploadMessage({
+        type: 'error',
+        text: `El archivo "${file.name}" no es válido. Solo se admiten archivos con extensión .jar`,
+      });
       return;
     }
 
     setUploadingJar(true);
     setUploadMessage(null);
+    const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+    setUploadProgress({ fileName: file.name, size: `${sizeMb} MB` });
 
     try {
       const res = await api.uploadNeoForgeJar(file);
       setUploadMessage({
         type: 'success',
-        text: `Archivo ${file.name} subido correctamente. Versión detectada y activada: ${res.version}`,
+        text: `Archivo "${file.name}" (${sizeMb} MB) procesado e instalado con éxito. Versión detectada y activada: ${res.version}`,
       });
       await loadLocalNeoForge();
       await loadInstalledMetadata();
     } catch (err: any) {
       setUploadMessage({
         type: 'error',
-        text: err.message || 'Error al subir el archivo .jar de NeoForge',
+        text: err.message || `Error al procesar "${file.name}" en el servidor`,
       });
     } finally {
       setUploadingJar(false);
+      setUploadProgress(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
+  };
+
+  const handleJarFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    await processJarUpload(file);
+  };
+
+  // Whole-card drag and drop listeners
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current += 1;
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      setIsDraggingOver(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current -= 1;
+    if (dragCounterRef.current <= 0) {
+      setIsDraggingOver(false);
+      dragCounterRef.current = 0;
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(false);
+    dragCounterRef.current = 0;
+
+    const files = e.dataTransfer.files;
+    if (!files || files.length === 0) return;
+    await processJarUpload(files[0]);
   };
 
   const handleRunConsoleVersionCommand = async () => {
@@ -152,6 +253,17 @@ export const VersionsView: React.FC = () => {
       setConsoleOutput(`Error al enviar comando: ${err.message || 'Servidor desconectado'}`);
     } finally {
       setExecutingCommand(false);
+    }
+  };
+
+  const handleCopyConsole = async () => {
+    if (!consoleOutput) return;
+    try {
+      await navigator.clipboard.writeText(consoleOutput);
+      setCopiedConsole(true);
+      setTimeout(() => setCopiedConsole(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy to clipboard:', err);
     }
   };
 
@@ -187,6 +299,22 @@ export const VersionsView: React.FC = () => {
     }
   };
 
+  // Filtered versions based on search query
+  const filteredVersions = useMemo(() => {
+    if (!searchQuery.trim()) return localNeoForge.versions;
+    const q = searchQuery.toLowerCase().trim();
+    return localNeoForge.versions.filter(
+      (v) =>
+        v.version.toLowerCase().includes(q) ||
+        (v.mcVersion && v.mcVersion.toLowerCase().includes(q)) ||
+        (v.jarFileName && v.jarFileName.toLowerCase().includes(q))
+    );
+  }, [localNeoForge.versions, searchQuery]);
+
+  const activeCompat = getCompatibilityInfo(
+    localNeoForge.detectedMinecraftVersion || installedInfo?.mcVersion || '1.21.1'
+  );
+
   const tabs = [
     { id: 'neoforge', label: 'Motor NeoForge (Local & Archivos .JAR)', icon: <RareVersionsIcon size={16} /> },
     { id: 'minecraft', label: 'Versión de Minecraft (Mojang & Consola)', icon: <Cpu size={16} /> },
@@ -201,12 +329,9 @@ export const VersionsView: React.FC = () => {
             <RareVersionsIcon size={26} />
           </div>
           <div>
-            <h2 className="text-base font-bold text-white tracking-wide flex items-center gap-2">
-              <span>Gestión de Versiones de NeoForge & Minecraft</span>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-mono font-semibold border border-emerald-500/30">
-                Raíz Real del Servidor
-              </span>
-            </h2>
+            <h1 className="text-base font-bold text-white tracking-wide">
+              Gestión de Versiones de NeoForge & Minecraft
+            </h1>
             <p className="text-xs text-slate-400">
               Detecta versiones instaladas en disco, sube archivos .jar de NeoForge y administra la versión activa
             </p>
@@ -218,7 +343,7 @@ export const VersionsView: React.FC = () => {
             loadLocalNeoForge();
             loadInstalledMetadata();
           }}
-          className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 flex items-center gap-2 transition-colors self-start sm:self-auto cursor-pointer"
+          className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 flex items-center gap-2 transition-colors self-start sm:self-auto cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${loadingLocal ? 'animate-spin' : ''}`} />
           <span>Escanear Raíz</span>
@@ -230,8 +355,8 @@ export const VersionsView: React.FC = () => {
         <div
           className={`p-4 rounded-xl border flex items-center justify-between gap-3 text-xs font-medium transition-all ${
             uploadMessage.type === 'success'
-              ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300'
-              : 'bg-rose-950/40 border-rose-500/40 text-rose-300'
+              ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-200'
+              : 'bg-rose-950/40 border-rose-500/40 text-rose-200'
           }`}
         >
           <div className="flex items-center gap-2.5">
@@ -244,7 +369,7 @@ export const VersionsView: React.FC = () => {
           </div>
           <button
             onClick={() => setUploadMessage(null)}
-            className="text-slate-400 hover:text-white px-2 py-0.5 text-[11px] rounded bg-slate-800/60"
+            className="text-slate-300 hover:text-white px-3 py-1 text-xs rounded-lg bg-slate-800/80 hover:bg-slate-700 transition-colors cursor-pointer min-h-[30px] flex items-center"
           >
             Cerrar
           </button>
@@ -253,48 +378,77 @@ export const VersionsView: React.FC = () => {
 
       {/* Active Version Overview Card */}
       <div className="glass-panel rounded-2xl p-5 border border-slate-800 relative overflow-hidden bg-gradient-to-r from-dark-900 via-dark-900/90 to-dark-950">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+          <div className="flex items-start sm:items-center gap-3.5">
             <div
-              className={`w-12 h-12 rounded-xl flex items-center justify-center border ${
+              className={`w-14 h-14 rounded-2xl flex items-center justify-center border shrink-0 ${
                 localNeoForge.activeVersion || installedInfo?.isInstalled
-                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.2)]'
                   : 'bg-amber-500/10 border-amber-500/30 text-amber-400'
               }`}
             >
-              <RareVersionsIcon size={28} />
+              <RareVersionsIcon size={30} />
             </div>
 
             <div>
-              <span className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block">
-                Versión NeoForge Activa en Ejecución
-              </span>
-              <h3 className="text-base font-bold text-white tracking-tight flex items-center gap-2 mt-0.5">
-                {localNeoForge.activeVersion ? (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-medium text-slate-300">
+                  Motor y Versión del Servidor
+                </span>
+              </div>
+
+              <div className="mt-1 flex items-center gap-3 flex-wrap">
+                {localNeoForge.activeVersion || installedInfo?.loaderVersion ? (
                   <>
-                    <span className="text-emerald-400 font-mono font-black">
-                      NeoForge {localNeoForge.activeVersion}
+                    <span className="text-lg font-bold text-white font-mono flex items-center gap-2">
+                      <span className="text-emerald-400">
+                        Minecraft {localNeoForge.detectedMinecraftVersion || installedInfo?.mcVersion || '1.21.1'}
+                      </span>
+                      <span className="text-slate-500">•</span>
+                      <span className="text-cyan-400">
+                        NeoForge {localNeoForge.activeVersion || installedInfo?.loaderVersion}
+                      </span>
                     </span>
-                    <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
-                      <Zap className="w-3 h-3" />
-                      HABILITADA (Única Activa)
+                    <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 font-semibold">
+                      <Zap className="w-3 h-3 text-emerald-400" />
+                      ACTIVA
                     </span>
                   </>
+                ) : installedInfo?.isInstalled ? (
+                  <span className="text-base font-bold text-white font-mono">
+                    Minecraft {installedInfo.mcVersion || 'Detectado'} ({installedInfo.serverType || 'Vanilla'})
+                  </span>
                 ) : (
                   <span className="text-amber-400 flex items-center gap-1.5 text-sm font-semibold">
                     <AlertTriangle className="w-4 h-4" />
                     No hay versión de NeoForge activada todavía en server/
                   </span>
                 )}
-              </h3>
+              </div>
+
+              <div className="text-xs text-slate-400 font-mono mt-2 flex items-center gap-3 flex-wrap">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-slate-500">Directorio:</span>
+                  <code className="text-emerald-300 bg-dark-950 px-2 py-0.5 rounded border border-slate-800">
+                    {localNeoForge.serverDir || installedInfo?.serverDir || '/home/vm/mcserver/server'}
+                  </code>
+                </div>
+
+                <div className="flex items-center gap-1 text-[11px] text-cyan-300 bg-cyan-950/30 px-2 py-0.5 rounded border border-cyan-500/20">
+                  <Coffee className="w-3 h-3 text-cyan-400" />
+                  <span>{activeCompat.java}</span>
+                </div>
+              </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 text-xs font-mono">
-            <span className="text-slate-400">Objetivo scripts/start.sh:</span>
-            <span className="px-2.5 py-1 rounded-lg bg-dark-950 border border-slate-800 text-emerald-400">
-              {localNeoForge.activeVersion ? `neoforge/${localNeoForge.activeVersion}` : 'default'}
-            </span>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 text-xs font-mono self-start lg:self-auto">
+            <div className="px-3 py-1.5 rounded-xl bg-dark-950 border border-slate-800 text-slate-300">
+              <span className="text-slate-500 mr-1.5">Lanzador:</span>
+              <span className="text-emerald-400 font-bold">
+                {localNeoForge.activeVersion ? `neoforge-${localNeoForge.activeVersion}` : 'start.sh'}
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -310,37 +464,86 @@ export const VersionsView: React.FC = () => {
       {/* TAB 1: NEOFORGE (DISCO LOCAL & SUBIDA DE JAR) */}
       {engineTab === 'neoforge' && (
         <div className="space-y-6">
-          {/* Rule Reminder Info */}
+          {/* Guía de Compatibilidad y Ejecución */}
           <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 flex items-start gap-3">
             <Info className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
-            <div className="text-xs space-y-1">
-              <p className="font-semibold text-slate-200">
-                Regla de Versiones de NeoForge en el Servidor:
-              </p>
-              <p className="text-slate-400 leading-relaxed">
-                En el servidor pueden coexistir múltiples carpetas o instaladores de NeoForge, pero <strong>solo UNA versión está habilitada a la vez</strong>.
-                Si subes una nueva versión (por ejemplo <code>21.1.20</code> teniendo antes <code>21.1.12</code>), el sistema <strong>usará automáticamente la versión recién instalada</strong>, o puedes alternar manualmente la que desees activar con un solo clic.
-              </p>
+            <div className="text-xs space-y-1.5">
+              <h3 className="font-semibold text-slate-200">
+                Guía de Compatibilidad y Ejecución de NeoForge
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-slate-400 pt-1">
+                <div className="p-2.5 rounded-lg bg-dark-950/60 border border-slate-800/80">
+                  <span className="text-slate-200 font-medium block">Versión Única Activa</span>
+                  <span className="text-[11px] leading-relaxed text-slate-400">
+                    Pueden coexistir múltiples librerías, pero solo una versión ejecuta el servidor a la vez.
+                  </span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-dark-950/60 border border-slate-800/80">
+                  <span className="text-slate-200 font-medium block">Runtime Java</span>
+                  <span className="text-[11px] leading-relaxed text-slate-400">
+                    NeoForge 21.x para Minecraft 1.21.1 requiere <strong>OpenJDK 21 LTS</strong>.
+                  </span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-dark-950/60 border border-slate-800/80">
+                  <span className="text-slate-200 font-medium block">Carpeta /mods</span>
+                  <span className="text-[11px] leading-relaxed text-slate-400">
+                    Verifica que tus mods coincidan exactamente con la versión menor de Minecraft.
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* Subir archivo .jar de NeoForge */}
-          <div className="glass-panel rounded-2xl p-6 border border-slate-800 space-y-4">
-            <div className="flex items-center justify-between">
+          {/* Subir archivo .jar de NeoForge con Drag-and-Drop en Toda la Tarjeta */}
+          <div
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+            className={`glass-panel rounded-2xl p-6 border transition-all relative overflow-hidden ${
+              isDraggingOver
+                ? 'border-emerald-400 bg-emerald-950/30 shadow-[0_0_35px_rgba(16,185,129,0.25)] ring-2 ring-emerald-400/40'
+                : 'border-slate-800'
+            }`}
+          >
+            {/* Overlay visual cuando se arrastra un archivo */}
+            {isDraggingOver && (
+              <div className="absolute inset-0 bg-dark-950/85 backdrop-blur-sm z-20 flex flex-col items-center justify-center gap-3 border-2 border-dashed border-emerald-400 rounded-2xl pointer-events-none animate-fadeIn">
+                <div className="w-16 h-16 rounded-2xl bg-emerald-500/20 border border-emerald-400 flex items-center justify-center text-emerald-400 scale-105 transition-transform duration-300 shadow-[0_0_25px_rgba(16,185,129,0.3)]">
+                  <Upload className="w-8 h-8" />
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-bold text-white">¡Suelta el archivo .jar de NeoForge aquí!</p>
+                  <p className="text-xs text-emerald-300 font-mono mt-0.5">
+                    Se subirá e instalará automáticamente en el servidor
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-sm font-bold text-white flex items-center gap-2">
                   <Upload className="w-4 h-4 text-emerald-400" />
                   <span>Subir Archivo .JAR de NeoForge</span>
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Sube un archivo instalador oficial (ej. <code>neoforge-21.1.20-installer.jar</code>) o jar de servidor para activarlo automáticamente.
+                  Sube un archivo instalador oficial (ej. <code>neoforge-21.1.20-installer.jar</code>) o jar ejecutable para activarlo.
                 </p>
               </div>
             </div>
 
             <div
+              role="button"
+              tabIndex={0}
               onClick={() => fileInputRef.current?.click()}
-              className={`border-2 border-dashed rounded-xl p-8 flex flex-col items-center justify-center gap-3 transition-all cursor-pointer ${
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  fileInputRef.current?.click();
+                }
+              }}
+              className={`border-2 border-dashed rounded-xl p-8 flex flex-col items-center justify-center gap-3 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 focus-visible:ring-offset-dark-950 ${
                 uploadingJar
                   ? 'border-emerald-500 bg-emerald-950/20'
                   : 'border-slate-700/80 hover:border-emerald-500/70 hover:bg-slate-900/40 bg-dark-950/40'
@@ -365,15 +568,17 @@ export const VersionsView: React.FC = () => {
 
               <div className="text-center space-y-1">
                 <p className="text-xs font-semibold text-slate-200">
-                  {uploadingJar ? 'Subiendo e instalando versión de NeoForge...' : 'Haz clic para seleccionar o arrastra un archivo .jar aquí'}
+                  {uploadingJar && uploadProgress
+                    ? `Subiendo "${uploadProgress.fileName}" (${uploadProgress.size})...`
+                    : 'Haz clic para seleccionar o arrastra un archivo .jar a esta tarjeta'}
                 </p>
                 <p className="text-[11px] text-slate-400 font-mono">
-                  Admite archivos .jar de instaladores o ejecutables de servidor NeoForge
+                  Admite archivos instaladores (-installer.jar) o binarios ejecutables de servidor
                 </p>
               </div>
 
               {!uploadingJar && (
-                <span className="px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-mono font-medium hover:bg-emerald-500/20">
+                <span className="px-3.5 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 text-xs font-mono font-medium hover:bg-emerald-500/20 transition-colors">
                   Seleccionar Archivo .jar
                 </span>
               )}
@@ -382,20 +587,34 @@ export const VersionsView: React.FC = () => {
 
           {/* Versiones de NeoForge detectadas en la raíz del servidor */}
           <div className="glass-panel rounded-2xl p-6 border border-slate-800 space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <h3 className="text-sm font-bold text-white flex items-center gap-2">
                   <HardDrive className="w-4 h-4 text-emerald-400" />
                   <span>Versiones de NeoForge Detectadas en la Raíz</span>
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Archivos y librerías encontradas físicamente en <code>server/libraries/net/neoforged/neoforge/</code> o en la raíz
+                  Librerías encontradas físicamente en <code>server/libraries/net/neoforged/neoforge/</code> o en la raíz
                 </p>
               </div>
 
-              <span className="text-xs font-mono px-2.5 py-1 rounded-lg bg-dark-950 text-slate-300 border border-slate-800">
-                {localNeoForge.versions.length} {localNeoForge.versions.length === 1 ? 'versión' : 'versiones'} en disco
-              </span>
+              <div className="flex items-center gap-2.5">
+                {/* Búsqueda rápida */}
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Filtrar versión..."
+                    className="pl-8 pr-3 py-1.5 bg-dark-950 border border-slate-700/80 rounded-lg text-xs font-mono text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500 w-36 sm:w-48"
+                  />
+                </div>
+
+                <span className="text-xs font-mono px-2.5 py-1 rounded-lg bg-dark-950 text-slate-300 border border-slate-800 shrink-0">
+                  {filteredVersions.length} de {localNeoForge.versions.length}
+                </span>
+              </div>
             </div>
 
             {loadingLocal ? (
@@ -403,21 +622,22 @@ export const VersionsView: React.FC = () => {
                 <RefreshCw className="w-6 h-6 animate-spin text-emerald-400" />
                 <span className="text-xs font-mono">Escaneando directorio del servidor...</span>
               </div>
-            ) : localNeoForge.versions.length === 0 ? (
+            ) : filteredVersions.length === 0 ? (
               <div className="p-8 rounded-xl bg-dark-950/60 border border-slate-800 text-center space-y-2">
                 <RareVersionsIcon size={32} className="mx-auto text-slate-600" />
                 <p className="text-xs text-slate-300 font-medium">
-                  No se encontraron versiones de NeoForge instaladas todavía.
+                  {searchQuery ? `No se encontraron versiones coincidentes con "${searchQuery}".` : 'No se encontraron versiones de NeoForge instaladas todavía.'}
                 </p>
-                <p className="text-[11px] text-slate-500">
-                  Sube un instalador <code>.jar</code> arriba para comenzar o instala una versión.
+                <p className="text-[11px] text-slate-400">
+                  {searchQuery ? 'Prueba con otro término de búsqueda.' : 'Sube un instalador .jar arriba para comenzar.'}
                 </p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {localNeoForge.versions.map((ver) => {
+                {filteredVersions.map((ver) => {
                   const isActive = ver.isActive;
                   const isBusy = activatingVersion === ver.version;
+                  const itemCompat = getCompatibilityInfo(ver.mcVersion);
 
                   return (
                     <div
@@ -428,12 +648,17 @@ export const VersionsView: React.FC = () => {
                           : 'bg-dark-950/60 border-slate-800 hover:border-slate-700'
                       }`}
                     >
-                      <div className="space-y-2">
+                      <div className="space-y-3">
                         <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-sm font-bold text-white font-mono">
                               NeoForge {ver.version}
                             </span>
+                            {ver.mcVersion && (
+                              <span className="text-xs text-emerald-400 font-mono bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/30">
+                                Minecraft {ver.mcVersion}
+                              </span>
+                            )}
                             {isActive && (
                               <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-mono font-bold flex items-center gap-1">
                                 <Check className="w-3 h-3 text-emerald-400" />
@@ -445,6 +670,20 @@ export const VersionsView: React.FC = () => {
                           <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-dark-900 border border-slate-800 text-slate-400">
                             {ver.source === 'libraries' ? 'Librería Instalada' : 'Archivo .jar'}
                           </span>
+                        </div>
+
+                        {/* Fila de Compatibilidad & Entorno */}
+                        <div className="flex items-center gap-2 flex-wrap text-[11px] font-mono">
+                          <span className="px-2 py-0.5 rounded bg-cyan-950/30 border border-cyan-500/20 text-cyan-300 flex items-center gap-1">
+                            <Coffee className="w-3 h-3 text-cyan-400" />
+                            {itemCompat.java}
+                          </span>
+                          {ver.mcVersion && (
+                            <span className="px-2 py-0.5 rounded bg-slate-800/80 border border-slate-700 text-slate-300 flex items-center gap-1">
+                              <Boxes className="w-3 h-3 text-emerald-400" />
+                              Mods {ver.mcVersion}
+                            </span>
+                          )}
                         </div>
 
                         <div className="space-y-1 text-[11px] font-mono text-slate-400">
@@ -467,9 +706,9 @@ export const VersionsView: React.FC = () => {
                         </div>
                       </div>
 
-                      <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between">
+                      <div className="pt-2.5 border-t border-slate-800/80 flex items-center justify-between">
                         <span className="text-[11px] text-slate-400">
-                          {isActive ? 'En ejecución por start.sh' : 'Inactiva (Disponible para activar)'}
+                          {isActive ? 'En ejecución por start.sh' : 'Inactiva (Lista para conmutar)'}
                         </span>
 
                         {isActive ? (
@@ -481,7 +720,7 @@ export const VersionsView: React.FC = () => {
                           <button
                             onClick={() => handleActivateNeoForge(ver.version)}
                             disabled={isBusy}
-                            className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-all shadow-md shadow-emerald-950 cursor-pointer disabled:opacity-50"
+                            className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-all shadow-md shadow-emerald-950 cursor-pointer disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
                           >
                             {isBusy ? (
                               <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -520,7 +759,7 @@ export const VersionsView: React.FC = () => {
               <button
                 onClick={handleRunConsoleVersionCommand}
                 disabled={executingCommand}
-                className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
+                className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
               >
                 {executingCommand ? (
                   <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -532,9 +771,28 @@ export const VersionsView: React.FC = () => {
             </div>
 
             {consoleOutput && (
-              <div className="p-3.5 rounded-xl bg-dark-950 border border-slate-800 font-mono text-xs text-emerald-400 flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
-                <span>{consoleOutput}</span>
+              <div className="p-3.5 rounded-xl bg-dark-950 border border-slate-800 font-mono text-xs text-emerald-400 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 overflow-hidden">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                  <span className="truncate">{consoleOutput}</span>
+                </div>
+                <button
+                  onClick={handleCopyConsole}
+                  className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-sans flex items-center gap-1.5 shrink-0 transition-colors cursor-pointer"
+                  title="Copiar salida de consola"
+                >
+                  {copiedConsole ? (
+                    <>
+                      <Check className="w-3 h-3 text-emerald-400" />
+                      <span className="text-emerald-400">¡Copiado!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3 h-3 text-slate-400" />
+                      <span>Copiar</span>
+                    </>
+                  )}
+                </button>
               </div>
             )}
           </div>
@@ -548,7 +806,7 @@ export const VersionsView: React.FC = () => {
                   <span>Versiones Oficiales de Mojang (Vanilla)</span>
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Obtenidas en tiempo real desde la API de Mojang. Puedes instalar una versión Vanilla oficial como alternativa.
+                  Obtenidas en tiempo real desde la API de Mojang. Puedes instalar una versión Vanilla oficial como alternativa limpia.
                 </p>
               </div>
 
@@ -577,35 +835,71 @@ export const VersionsView: React.FC = () => {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-300 font-mono uppercase">
-                    Asignación de Memoria RAM
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-300 font-mono uppercase">
+                      Asignación de Memoria RAM
+                    </label>
+                    {/* Presets rápidos de RAM */}
+                    <div className="flex items-center gap-1 text-[10px] font-mono">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRamInitial('2048M');
+                          setRamMax('4096M');
+                        }}
+                        className="px-1.5 py-0.5 rounded bg-dark-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 cursor-pointer"
+                      >
+                        2G/4G
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRamInitial('4096M');
+                          setRamMax('8192M');
+                        }}
+                        className="px-1.5 py-0.5 rounded bg-dark-900 hover:bg-slate-800 text-emerald-400 border border-emerald-500/30 cursor-pointer"
+                      >
+                        4G/8G
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRamInitial('8192M');
+                          setRamMax('12288M');
+                        }}
+                        className="px-1.5 py-0.5 rounded bg-dark-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 cursor-pointer"
+                      >
+                        8G/12G
+                      </button>
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-2 gap-2">
                     <input
                       type="text"
                       value={ramInitial}
                       onChange={(e) => setRamInitial(e.target.value)}
                       placeholder="4096M"
-                      className="px-3 py-2 bg-dark-950 border border-slate-700/80 rounded-xl text-xs font-mono text-white"
+                      className="px-3 py-2 bg-dark-950 border border-slate-700/80 rounded-xl text-xs font-mono text-white focus:outline-none focus:border-emerald-500"
                     />
                     <input
                       type="text"
                       value={ramMax}
                       onChange={(e) => setRamMax(e.target.value)}
                       placeholder="8192M"
-                      className="px-3 py-2 bg-dark-950 border border-slate-700/80 rounded-xl text-xs font-mono text-white"
+                      className="px-3 py-2 bg-dark-950 border border-slate-700/80 rounded-xl text-xs font-mono text-white focus:outline-none focus:border-emerald-500"
                     />
                   </div>
                 </div>
               </div>
 
-              <div className="p-3.5 rounded-xl bg-dark-950/80 border border-slate-800 flex items-center justify-between">
-                <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none">
+              <div className="p-3.5 rounded-xl bg-dark-950/80 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <label className="flex items-center gap-2.5 text-xs text-slate-300 cursor-pointer select-none">
                   <input
                     type="checkbox"
                     checked={acceptEula}
                     onChange={(e) => setAcceptEula(e.target.checked)}
-                    className="w-4 h-4 rounded text-emerald-500 focus:ring-0 focus:ring-offset-0 bg-dark-900 border-slate-700"
+                    className="w-4 h-4 rounded text-emerald-500 focus:ring-0 focus:ring-offset-0 bg-dark-900 border-slate-700 cursor-pointer"
                   />
                   <span>Acepto el Contrato de Licencia de Usuario Final (EULA) de Mojang</span>
                 </label>
@@ -613,7 +907,7 @@ export const VersionsView: React.FC = () => {
                 <button
                   type="submit"
                   disabled={installingVanilla}
-                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all disabled:opacity-50 cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all disabled:opacity-50 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
                 >
                   {installingVanilla ? 'Descargando Vanilla...' : `Instalar Vanilla ${selectedVanillaVersion}`}
                 </button>

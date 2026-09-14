@@ -1,4 +1,5 @@
 import React from 'react';
+import { motion } from 'framer-motion';
 import {
   RareServerIcon,
   RareVersionsIcon,
@@ -28,83 +29,96 @@ export const Sidebar: React.FC<SidebarProps> = ({
   telemetry,
   onOpenPowerModal,
 }) => {
-  const { logout, username } = useAuth();
+  const { username, logout } = useAuth();
+  const isOnline = Boolean(telemetry?.isRunning);
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: RareServerIcon },
-    { id: 'versions', label: 'Versión & Motor', icon: RareVersionsIcon, badge: 'NeoForge' },
-    { id: 'console', label: 'Consola en Vivo', icon: RareTerminalIcon, badge: 'Live' },
+    { id: 'versions', label: 'Versión & Motor', icon: RareVersionsIcon, badge: isOnline ? 'Activo' : undefined },
+    { id: 'console', label: 'Consola en Vivo', icon: RareTerminalIcon, badge: isOnline ? 'Live' : undefined },
     { id: 'properties', label: 'Configuración', icon: RarePropertiesIcon },
-    { id: 'players', label: 'Jugadores & OPs', icon: RarePlayersIcon, count: telemetry?.players?.online },
+    { id: 'players', label: 'Jugadores & OPs', icon: RarePlayersIcon, count: telemetry?.players?.online ?? 0 },
     { id: 'mods', label: 'Gestor de Mods', icon: RareModsIcon },
     { id: 'files', label: 'Archivos Servidor', icon: RareFilesIcon },
     { id: 'playit', label: 'Túnel Playit.gg', icon: RarePlayitIcon },
     { id: 'settings', label: 'Ajustes del Panel', icon: RareSettingsIcon },
   ];
 
-  const isOnline = Boolean(telemetry?.isRunning);
-
   return (
-    <aside className="hidden lg:flex flex-col w-64 bg-dark-900 border-r border-slate-800/80 shrink-0 h-screen sticky top-0 select-none z-30">
+    <aside className="w-64 bg-dark-900 border-r border-slate-800/80 flex flex-col shrink-0 h-screen select-none">
       {/* Brand Header */}
-      <div className="p-4 border-b border-slate-800/80 flex items-center justify-between">
+      <div className="p-5 border-b border-slate-800/80 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-900/30 border border-emerald-400/30">
-            <RareVersionsIcon size={22} className="text-white" />
-          </div>
+          <motion.div
+            className="w-10 h-10 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.2)]"
+            whileHover={{ scale: 1.05, rotate: 5 }}
+            transition={{ type: 'spring', stiffness: 350, damping: 20 }}
+          >
+            <RareServerIcon size={22} />
+          </motion.div>
           <div>
-            <span className="font-bold text-sm tracking-tight text-white block">MC Manager</span>
-            <span className="text-[11px] text-emerald-400 font-mono block">
-              {telemetry?.version || 'Sin Versión'}
+            <h1 className="font-bold text-sm tracking-tight text-white flex items-center gap-1.5">
+              <span>MC Manager</span>
+            </h1>
+            <span className="text-[10px] text-slate-400 font-mono block">
+              {telemetry?.version || 'Minecraft Server'}
             </span>
           </div>
         </div>
       </div>
 
-      {/* Server Status Compact Banner */}
-      <div className="px-4 py-3 bg-dark-950/60 border-b border-slate-800/80 flex items-center justify-between">
+      {/* Quick Status Pill */}
+      <div className="mx-3 mt-3 px-3 py-2 rounded-xl bg-dark-950/80 border border-slate-800/90 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="relative flex h-2.5 w-2.5">
-            {isOnline && (
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-            )}
-            <span
-              className={`relative inline-flex rounded-full h-2.5 w-2.5 ${
-                isOnline ? 'bg-emerald-500' : 'bg-rose-500'
-              }`}
-            />
-          </span>
+          <span
+            className={`w-2 h-2 rounded-full ${
+              isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-rose-500'
+            }`}
+          />
           <span className="text-xs font-semibold text-slate-300 font-mono">
             {isOnline ? 'Servidor Activo' : 'Servidor Detenido'}
           </span>
         </div>
 
-        <button
+        <motion.button
           onClick={onOpenPowerModal}
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.92 }}
           className="p-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
           title="Control de Energía"
         >
           <RarePowerIcon size={16} />
-        </button>
+        </motion.button>
       </div>
 
-      {/* Navigation List with RareUI Interactive Effects */}
+      {/* Navigation List with RareUI Interactive Effects & layoutId spring */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = currentTab === item.id;
 
           return (
-            <button
+            <motion.button
               key={item.id}
               onClick={() => onSelectTab(item.id)}
-              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+              whileHover={{ x: 2 }}
+              whileTap={{ scale: 0.98 }}
+              className={`relative w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium transition-colors cursor-pointer outline-none ${
                 isActive
-                  ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.15)] font-semibold'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                  ? 'text-emerald-300 font-semibold'
+                  : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              <div className="flex items-center gap-3">
+              {/* Animated active highlight pill */}
+              {isActive && (
+                <motion.div
+                  layoutId="sidebarActivePill"
+                  className="absolute inset-0 rounded-xl bg-emerald-500/15 border border-emerald-500/30 shadow-[0_0_20px_rgba(16,185,129,0.18)] z-0"
+                  transition={{ type: 'spring', stiffness: 450, damping: 35 }}
+                />
+              )}
+
+              <div className="relative z-10 flex items-center gap-3">
                 <Icon
                   size={18}
                   className={isActive ? 'text-emerald-400' : 'text-slate-400'}
@@ -113,17 +127,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
 
               {item.badge && (
-                <span className="px-1.5 py-0.5 text-[10px] font-mono font-semibold rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                <span className="relative z-10 px-1.5 py-0.5 text-[10px] font-mono font-semibold rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                   {item.badge}
                 </span>
               )}
 
               {typeof item.count === 'number' && (
-                <span className="px-1.5 py-0.5 text-[10px] font-mono rounded bg-slate-800 text-slate-300 border border-slate-700">
+                <span className="relative z-10 px-1.5 py-0.5 text-[10px] font-mono rounded bg-slate-800 text-slate-300 border border-slate-700">
                   {item.count}
                 </span>
               )}
-            </button>
+            </motion.button>
           );
         })}
       </nav>
@@ -173,7 +187,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         <button
           onClick={logout}
-          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+          className="p-1.5 rounded-lg text-white/70 hover:text-white hover:bg-rose-900/30 transition-colors cursor-pointer"
           title="Cerrar Sesión"
         >
           <LogOut className="w-4 h-4" />

@@ -15,6 +15,7 @@ panel-config.json
 *.log
 data/
 mcserver/
+test/
 
 # Environment variables
 .env

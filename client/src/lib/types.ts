@@ -18,17 +18,25 @@ export interface TelemetryData {
     java: number; // percentage 0-100
   };
   ram: {
-    used: number; // in MB
+    used: number; // Java memory in MB
     total: number; // system total in MB
     maxAllocated: number; // Xmx in MB
+    percent?: number;
+    systemUsed?: number;
+    systemTotal?: number;
+    systemPercent?: number;
   };
   disk: {
     used: number; // in GB
     total: number; // in GB
     free: number; // in GB
+    percent?: number;
+    serverSizeMb?: number;
+    serverSizeFormatted?: string;
   };
   tps: {
     current: number;
+    avgTickMs?: number;
     history: number[];
   };
   players: {
@@ -134,13 +142,15 @@ export interface LoaderRelease {
 
 export interface InstalledVersionInfo {
   isInstalled: boolean;
-  serverType: ServerEngineType;
+  serverType: ServerEngineType | string;
   mcVersion: string | null;
   loaderVersion: string | null;
   javaVersion: string | null;
   jarFile: string | null;
   eulaAccepted: boolean;
   installedAt?: string;
+  serverDir?: string;
+  formattedVersion?: string;
 }
 
 export interface InstallVersionPayload {
@@ -172,6 +182,7 @@ export interface FilesResponse {
 // Local Discovered NeoForge Version Item
 export interface LocalNeoForgeItem {
   version: string;
+  mcVersion?: string;
   isInstalled: boolean;
   isActive: boolean;
   hasUnixArgs?: boolean;

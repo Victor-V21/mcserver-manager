@@ -75,6 +75,8 @@ const getCurrentHandler = (_req: Request, res: Response) => {
       eulaAccepted: current.eulaAccepted,
       allocatedRamMin: current.allocatedRamMin,
       allocatedRamMax: current.allocatedRamMax,
+      serverDir: current.serverDir || null,
+      formattedVersion: current.formattedVersion || null,
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to get current version info' });

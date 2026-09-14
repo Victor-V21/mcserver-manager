@@ -40,25 +40,30 @@ router.get('/', (_req: Request, res: Response) => {
   }
 });
 
-// POST /api/mods/upload (single or multiple)
-router.post('/upload', upload.array('mods', 20), (req: Request, res: Response) => {
-  try {
-    const files = req.files as Express.Multer.File[];
-    const uploadedNames = files ? files.map((f) => f.filename) : [];
-    res.json({
+// POST /api/mods/upload (single or multiple, supports any field name e.g. 'file' or 'mods')
+router.post('/upload', (req: Request, res: Response) => {
+  upload.any()(req, res, (err: any) => {
+    if (err) {
+      return res.status(400).json({ error: err.message || 'Error al subir mod(s)' });
+    }
+
+    const files = (req.files as Express.Multer.File[]) || [];
+    const uploadedNames = files.map((f) => f.filename);
+
+    return res.json({
       success: true,
-      message: `${uploadedNames.length} mod(s) uploaded successfully`,
+      message: `${uploadedNames.length} mod(s) subido(s) exitosamente`,
       files: uploadedNames,
+      filename: uploadedNames[0] || '',
     });
-  } catch (err: any) {
-    res.status(400).json({ error: err.message || 'Upload failed' });
-  }
+  });
 });
 
 // PATCH /api/mods/toggle
 router.patch('/toggle', (req: Request, res: Response) => {
-  const { filename, enable } = req.body;
-  if (!filename || typeof enable !== 'boolean') {
+  const filename = req.body.filename || req.body.name;
+  const enable = typeof req.body.enable === 'boolean' ? req.body.enable : undefined;
+  if (!filename || enable === undefined) {
     res.status(400).json({ error: 'filename and enable (boolean) are required' });
     return;
   }
@@ -71,9 +76,10 @@ router.patch('/toggle', (req: Request, res: Response) => {
   }
 });
 
-// POST /api/mods/rename
-router.post('/rename', (req: Request, res: Response) => {
-  const { oldName, newName } = req.body;
+// POST /api/mods/rename and PATCH /api/mods/rename
+const renameHandler = (req: Request, res: Response) => {
+  const oldName = req.body.oldName || req.body.oldFilename || req.body.filename;
+  const newName = req.body.newName || req.body.newFilename;
   if (!oldName || !newName) {
     res.status(400).json({ error: 'oldName and newName are required' });
     return;
@@ -85,7 +91,10 @@ router.post('/rename', (req: Request, res: Response) => {
   } catch (err: any) {
     res.status(400).json({ error: err.message || 'Rename failed' });
   }
-});
+};
+
+router.post('/rename', renameHandler);
+router.patch('/rename', renameHandler);
 
 // DELETE /api/mods/:filename
 router.delete('/:filename', (req: Request, res: Response) => {

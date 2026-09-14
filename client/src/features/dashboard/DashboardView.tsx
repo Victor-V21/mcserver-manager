@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { motion } from 'framer-motion';
 import { TelemetryData, PlayitStatus } from '../../lib/types';
 import { MetricGauge } from '../../components/common/MetricGauge';
 import { ConnectedPlayersList } from './ConnectedPlayersList';
@@ -216,10 +217,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           title="Memoria RAM"
           value={
             isOnline && telemetry?.ram?.used
-              ? `${(telemetry.ram.used / 1024).toFixed(1)} GB`
-              : '0.0 GB'
+              ? `${(telemetry.ram.used / 1024).toFixed(2)} GB`
+              : '0.00 GB'
           }
-          subtitle={`Asignado: ${((telemetry?.ram?.maxAllocated || 8192) / 1024).toFixed(0)} GB / Sistema: ${((telemetry?.ram?.total || 16384) / 1024).toFixed(0)} GB`}
+          subtitle={`Asignado: ${((telemetry?.ram?.maxAllocated || 4096) / 1024).toFixed(0)} GB • Host libre: ${(Math.max(0, (telemetry?.ram?.total || 8192) - (telemetry?.ram?.systemUsed || telemetry?.ram?.used || 0)) / 1024).toFixed(1)} GB`}
           percentage={
             telemetry?.ram?.used && telemetry?.ram?.maxAllocated
               ? (telemetry.ram.used / telemetry.ram.maxAllocated) * 100
@@ -235,9 +236,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           value={isOnline ? `${telemetry?.tps?.current ?? 20.0} TPS` : '-- TPS'}
           subtitle={
             isOnline
-              ? (telemetry?.tps?.current ?? 20) >= 19.5
-                ? 'Rendimiento Óptimo'
-                : 'Carga Elevada detectada'
+              ? `Avg. Tick: ${telemetry?.tps?.avgTickMs !== undefined ? `${telemetry.tps.avgTickMs} ms` : '< 1.0 ms'} • Meta: 50 ms`
               : 'Servidor apagado'
           }
           percentage={isOnline ? ((telemetry?.tps?.current ?? 20) / 20) * 100 : 0}
@@ -247,11 +246,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         {/* Disk */}
         <MetricGauge
-          title="Almacenamiento"
-          value={telemetry?.disk?.used ? `${telemetry.disk.used} GB` : '-- GB'}
+          title="Almacenamiento Servidor"
+          value={
+            telemetry?.disk?.serverSizeFormatted ||
+            (telemetry?.disk?.serverSizeMb
+              ? `${telemetry.disk.serverSizeMb} MB`
+              : telemetry?.disk?.used
+              ? `${telemetry.disk.used} GB`
+              : '-- MB')
+          }
           subtitle={
             telemetry?.disk
-              ? `Libre: ${telemetry.disk.free} GB de ${telemetry.disk.total} GB`
+              ? `Libre en disco: ${telemetry.disk.free} GB de ${telemetry.disk.total} GB`
               : 'Consultando espacio...'
           }
           percentage={
@@ -273,71 +279,83 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         onToggleOp={onToggleOp}
       />
 
-      {/* Quick Access Navigation Tiles with RareIcons */}
+      {/* Quick Access Navigation Tiles with RareIcons & Framer Motion physics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-        <div
+        <motion.div
           onClick={() => onNavigateTab('versions')}
-          className="glass-panel-interactive rounded-2xl p-4 cursor-pointer flex items-center justify-between"
+          whileHover={{ y: -3, scale: 1.01 }}
+          whileTap={{ scale: 0.98 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+          className="glass-panel-interactive rounded-2xl p-4 cursor-pointer flex items-center justify-between group"
         >
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400">
+            <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400 group-hover:scale-105 transition-transform">
               <RareVersionsIcon size={20} />
             </div>
             <div>
-              <h4 className="text-xs font-bold text-white">Versión & Motor</h4>
+              <h4 className="text-xs font-bold text-white group-hover:text-emerald-300 transition-colors">Versión & Motor</h4>
               <p className="text-[11px] text-slate-400">Instalador NeoForge / MC</p>
             </div>
           </div>
-          <ExternalLink className="w-4 h-4 text-slate-500" />
-        </div>
+          <ExternalLink className="w-4 h-4 text-slate-500 group-hover:text-emerald-400 group-hover:translate-x-0.5 transition-all" />
+        </motion.div>
 
-        <div
+        <motion.div
           onClick={() => onNavigateTab('properties')}
-          className="glass-panel-interactive rounded-2xl p-4 cursor-pointer flex items-center justify-between"
+          whileHover={{ y: -3, scale: 1.01 }}
+          whileTap={{ scale: 0.98 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+          className="glass-panel-interactive rounded-2xl p-4 cursor-pointer flex items-center justify-between group"
         >
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-400">
+            <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-400 group-hover:scale-105 transition-transform">
               <RarePropertiesIcon size={20} />
             </div>
             <div>
-              <h4 className="text-xs font-bold text-white">server.properties</h4>
+              <h4 className="text-xs font-bold text-white group-hover:text-amber-300 transition-colors">server.properties</h4>
               <p className="text-[11px] text-slate-400">Gamemode, MOTD y red</p>
             </div>
           </div>
-          <ExternalLink className="w-4 h-4 text-slate-500" />
-        </div>
+          <ExternalLink className="w-4 h-4 text-slate-500 group-hover:text-amber-400 group-hover:translate-x-0.5 transition-all" />
+        </motion.div>
 
-        <div
+        <motion.div
           onClick={() => onNavigateTab('mods')}
-          className="glass-panel-interactive rounded-2xl p-4 cursor-pointer flex items-center justify-between"
+          whileHover={{ y: -3, scale: 1.01 }}
+          whileTap={{ scale: 0.98 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+          className="glass-panel-interactive rounded-2xl p-4 cursor-pointer flex items-center justify-between group"
         >
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-400">
+            <div className="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-400 group-hover:scale-105 transition-transform">
               <RareModsIcon size={20} />
             </div>
             <div>
-              <h4 className="text-xs font-bold text-white">Gestor de Mods</h4>
+              <h4 className="text-xs font-bold text-white group-hover:text-cyan-300 transition-colors">Gestor de Mods</h4>
               <p className="text-[11px] text-slate-400">Subir y conmutar .jar</p>
             </div>
           </div>
-          <ExternalLink className="w-4 h-4 text-slate-500" />
-        </div>
+          <ExternalLink className="w-4 h-4 text-slate-500 group-hover:text-cyan-400 group-hover:translate-x-0.5 transition-all" />
+        </motion.div>
 
-        <div
+        <motion.div
           onClick={() => onNavigateTab('playit')}
-          className="glass-panel-interactive rounded-2xl p-4 cursor-pointer flex items-center justify-between"
+          whileHover={{ y: -3, scale: 1.01 }}
+          whileTap={{ scale: 0.98 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+          className="glass-panel-interactive rounded-2xl p-4 cursor-pointer flex items-center justify-between group"
         >
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-indigo-500/10 text-indigo-400">
+            <div className="p-2.5 rounded-xl bg-indigo-500/10 text-indigo-400 group-hover:scale-105 transition-transform">
               <RarePlayitIcon size={20} />
             </div>
             <div>
-              <h4 className="text-xs font-bold text-white">Túnel Playit.gg</h4>
+              <h4 className="text-xs font-bold text-white group-hover:text-indigo-300 transition-colors">Túnel Playit.gg</h4>
               <p className="text-[11px] text-slate-400">IP pública y puertos</p>
             </div>
           </div>
-          <ExternalLink className="w-4 h-4 text-slate-500" />
-        </div>
+          <ExternalLink className="w-4 h-4 text-slate-500 group-hover:text-indigo-400 group-hover:translate-x-0.5 transition-all" />
+        </motion.div>
       </div>
 
       {/* Quick Power Actions Modal */}
