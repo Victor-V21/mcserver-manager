@@ -11,6 +11,7 @@ import {
   Lock,
   RefreshCw,
   Terminal,
+  Sparkles
 } from 'lucide-react';
 
 export const SettingsView: React.FC = () => {
@@ -34,6 +35,10 @@ export const SettingsView: React.FC = () => {
   const [confirmPass, setConfirmPass] = useState('');
   const [passError, setPassError] = useState<string | null>(null);
 
+  const [aiDiagnosticEnabled, setAiDiagnosticEnabled] = useState(false);
+  const [aiApiKey, setAiApiKey] = useState('');
+  const [aiModel, setAiModel] = useState('gemini-3-flash-preview');
+
   useEffect(() => {
     loadSettings();
   }, []);
@@ -44,6 +49,9 @@ export const SettingsView: React.FC = () => {
       setSettings(data);
       setRootPath(data.serverRootPath);
       setValidation(data.validatedPaths);
+      if (data.aiDiagnosticEnabled !== undefined) setAiDiagnosticEnabled(data.aiDiagnosticEnabled);
+      if (data.aiApiKey) setAiApiKey(data.aiApiKey);
+      if (data.aiModel) setAiModel(data.aiModel);
     } catch {
       // Fallback
     }
@@ -66,7 +74,10 @@ export const SettingsView: React.FC = () => {
       await api.updateSettings({
         serverRootPath: rootPath,
         validatedPaths: validation,
-      });
+        aiDiagnosticEnabled,
+        aiApiKey,
+        aiModel,
+      } as any); // Cast as any because we send partial updates
       setSuccessMessage('Ajustes guardados correctamente en panel-config.json');
       setTimeout(() => setSuccessMessage(null), 3000);
     } finally {
@@ -262,6 +273,82 @@ export const SettingsView: React.FC = () => {
             Actualizar Contraseña Maestra
           </button>
         </form>
+      </div>
+
+      {/* AI Diagnostic Card */}
+      <div className="glass-panel rounded-2xl p-5 sm:p-6 border border-slate-800 space-y-4">
+        <div className="flex items-center gap-2.5 pb-3 border-b border-slate-800">
+          <Sparkles className="w-4 h-4 text-purple-400" />
+          <h3 className="text-sm font-bold text-white">Diagnóstico con IA (Google Gemini)</h3>
+        </div>
+        
+        <div className="space-y-4 max-w-lg">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-xs font-medium text-slate-300">Habilitar Diagnóstico de Crashes con IA</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">Analiza automáticamente los logs al detenerse el servidor e identifica mods problemáticos.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setAiDiagnosticEnabled(!aiDiagnosticEnabled)}
+              className={`w-11 h-6 rounded-full transition-colors relative ${aiDiagnosticEnabled ? 'bg-emerald-500' : 'bg-slate-700'}`}
+            >
+              <div className={`absolute top-1 left-1 bg-white w-4 h-4 rounded-full transition-transform ${aiDiagnosticEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+            </button>
+          </div>
+
+          <div className={`space-y-4 transition-opacity duration-300 ${aiDiagnosticEnabled ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-slate-300 block">Google Gemini API Key</label>
+              <input
+                type="password"
+                value={aiApiKey}
+                onChange={(e) => setAiApiKey(e.target.value)}
+                placeholder="AIzaSy..."
+                className="w-full px-3.5 py-2.5 bg-dark-950 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-purple-500 font-mono"
+              />
+              <p className="text-[10px] text-slate-500">Tu API Key se almacena localmente y de forma segura en panel-config.json</p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-slate-300 block">Modelo de Google Gemini</label>
+              <input
+                type="text"
+                value={aiModel}
+                onChange={(e) => setAiModel(e.target.value)}
+                placeholder="ej. gemini-2.5-flash, gemini-2.5-pro..."
+                className="w-full px-3.5 py-2.5 bg-dark-950 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-purple-500 font-mono"
+              />
+              <div className="space-y-1">
+                <span className="text-[11px] text-slate-400">Modelos recomendados:</span>
+                <div className="flex flex-wrap gap-1.5 pt-0.5">
+                  {[
+                    { id: 'gemini-3-flash-preview', label: 'gemini-3-flash-preview (Ultra rápido / Recomendado)' },
+                    { id: 'gemini-3.6-flash', label: 'gemini-3.6-flash (Estable)' },
+                    { id: 'gemini-3.8-flash', label: 'gemini-3.8-flash' },
+                  ].map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setAiModel(m.id)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-mono border transition-all ${
+                        aiModel === m.id
+                          ? 'bg-purple-500/20 text-purple-300 border-purple-500/50 shadow-sm shadow-purple-500/10'
+                          : 'bg-dark-950 text-slate-400 border-slate-800 hover:border-slate-700 hover:text-slate-200'
+                      }`}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  💡 Si el modelo configurado presenta alta demanda o saturación temporal (error 503), el sistema cambiará automáticamente a un modelo de respaldo disponible sin interrumpir el diagnóstico.
+                </p>
+              </div>
+              <p className="text-[10px] text-slate-500">Puedes ingresar o escribir cualquier modelo soportado por la API de Google.</p>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* RCON & Environment Details Card */}

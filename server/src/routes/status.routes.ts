@@ -64,4 +64,14 @@ router.post('/server/action', async (req: Request, res: Response) => {
   }
 });
 
+// POST /api/status/diagnose-ai
+router.post('/diagnose-ai', async (_req: Request, res: Response) => {
+  try {
+    const result = await processService.triggerAiDiagnostic();
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || 'Diagnostic failed' });
+  }
+});
+
 export default router;

@@ -5,6 +5,7 @@ import { ModFile } from '../../lib/types';
 import { Modal } from '../../components/common/Modal';
 import { AnimatedTabs } from '../../components/rareui/AnimatedTab';
 import { GlassShimmerButton } from '../../components/rareui/GlassShimmerButton';
+import { HoldButton } from '../../components/rareui/HoldButton';
 import { RareModsIcon } from '../../components/rareui/RareIcons';
 import {
   UploadCloud,
@@ -17,6 +18,7 @@ import {
   AlertTriangle,
   RefreshCw,
   X,
+  PowerOff,
 } from 'lucide-react';
 
 interface ModsViewProps {
@@ -88,6 +90,52 @@ export const ModsView: React.FC<ModsViewProps> = ({ telemetry }) => {
       setNotice({
         type: 'error',
         message: err.message || 'Error al cambiar estado del mod',
+      });
+    }
+  };
+
+  const handleDisableAllMods = async () => {
+    try {
+      const res = await api.disableAllMods();
+      // Fluid local update without page reload
+      setMods((prev) =>
+        prev.map((m) => {
+          const fn = m.filename.endsWith('.disabled') ? m.filename : `${m.filename}.disabled`;
+          return {
+            ...m,
+            isEnabled: false,
+            filename: fn,
+            name: fn,
+          };
+        })
+      );
+      setNotice({
+        type: 'warning',
+        message: `Se han desactivado todos los mods (${res.count || mods.length}). Es necesario reiniciar el servidor para que los cambios se apliquen en Minecraft.`,
+      });
+      await loadMods(true);
+    } catch (err: any) {
+      setNotice({
+        type: 'error',
+        message: err.message || 'Error al desactivar los mods',
+      });
+    }
+  };
+
+  const handleDeleteAllMods = async () => {
+    try {
+      const res = await api.deleteAllMods();
+      const count = res.count || mods.length;
+      setMods([]);
+      setNotice({
+        type: 'warning',
+        message: `Se han eliminado todos los mods (${count}) del servidor. Es necesario reiniciar el servidor para que los cambios se apliquen en Minecraft.`,
+      });
+      await loadMods(true);
+    } catch (err: any) {
+      setNotice({
+        type: 'error',
+        message: err.message || 'Error al eliminar todos los mods',
       });
     }
   };
@@ -234,15 +282,43 @@ export const ModsView: React.FC<ModsViewProps> = ({ telemetry }) => {
           </div>
         </div>
 
-        {/* Upload Button with RareUI GlassShimmerButton */}
-        <GlassShimmerButton
-          variant="emerald"
-          size="sm"
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <UploadCloud className="w-4 h-4" />
-          <span>Subir Mods (.jar)</span>
-        </GlassShimmerButton>
+        {/* Action Buttons: Hold to Disable All, Hold to Delete All, Upload */}
+        <div className="flex flex-wrap items-center gap-2">
+          {mods.length > 0 && (
+            <>
+              <HoldButton
+                variant="amber"
+                size="sm"
+                holdDurationMs={1500}
+                icon={<PowerOff className="w-3.5 h-3.5" />}
+                label="Desactivar todos"
+                holdingLabel="Mantén presionado..."
+                completedLabel="Desactivando..."
+                onConfirm={handleDisableAllMods}
+              />
+              <HoldButton
+                variant="danger"
+                size="sm"
+                holdDurationMs={2000}
+                icon={<Trash2 className="w-3.5 h-3.5" />}
+                label="Eliminar todos"
+                holdingLabel="Mantén presionado..."
+                completedLabel="Eliminando..."
+                onConfirm={handleDeleteAllMods}
+              />
+            </>
+          )}
+
+          {/* Upload Button with RareUI GlassShimmerButton */}
+          <GlassShimmerButton
+            variant="emerald"
+            size="sm"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <UploadCloud className="w-4 h-4" />
+            <span>Subir Mods (.jar)</span>
+          </GlassShimmerButton>
+        </div>
         <input
           ref={fileInputRef}
           type="file"
@@ -424,8 +500,8 @@ export const ModsView: React.FC<ModsViewProps> = ({ telemetry }) => {
               ) : (
                 filteredMods.map((mod) => {
                   const fileKey = mod.filename || mod.name;
-                  const errorModNames = errorModName ? errorModName.split(',').map(n => n.trim()) : [];
-                  const isErrorMod = errorModNames.some(name => 
+                  const errorModNames = errorModName ? errorModName.split(',').map((n: string) => n.trim()) : [];
+                  const isErrorMod = errorModNames.some((name: string) => 
                     mod.name.toLowerCase() === name || 
                     mod.filename.toLowerCase() === `${name}.jar` ||
                     mod.filename.toLowerCase().startsWith(`${name}-`) ||

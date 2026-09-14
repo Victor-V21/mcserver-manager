@@ -45,6 +45,14 @@ export interface TelemetryData {
     list: Player[];
   };
   version: string;
+  crashDiagnostic?: {
+    modName: string;
+    error: string;
+    solution: string;
+    severity?: 'error' | 'warning';
+    missingDependencies?: string[];
+    details?: string[];
+  } | null;
 }
 
 export interface OpPlayer {
@@ -113,11 +121,15 @@ export interface PathValidationStatus {
 
 export interface PanelSettings {
   serverRootPath: string;
+  initialSetupDone?: boolean;
   validatedPaths: PathValidationStatus;
   autoRestartOnCrash: boolean;
   rconPort: number;
   rconHost: string;
   maxMemoryAllocated: string;
+  aiDiagnosticEnabled?: boolean;
+  aiApiKey?: string;
+  aiModel?: string;
 }
 
 export interface UserSession {

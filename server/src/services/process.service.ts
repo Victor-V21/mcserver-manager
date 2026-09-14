@@ -5,6 +5,7 @@ import { ConfigService } from './config.service';
 import { RconService } from './rcon.service';
 import { SUBDIRS } from '../config/constants';
 import modErrors from '../data/mod-errors.json';
+import { CrashDiagnostic } from '../types';
 
 export class ProcessService {
   private static instance: ProcessService;
@@ -13,7 +14,8 @@ export class ProcessService {
   private serverProcess: ChildProcess | null = null;
   private serverStatus: 'online' | 'offline' | 'starting' | 'stopping' = 'offline';
   private startTime: number | null = null;
-  private lastCrashDiagnostic: { modName: string; error: string; solution: string } | null = null;
+  private isUserStopping: boolean = false;
+  private lastCrashDiagnostic: CrashDiagnostic | null = null;
   private modErrorPatterns: any[] = modErrors;
   private logBuffer: string = '';
 
@@ -22,13 +24,49 @@ export class ProcessService {
     this.rconService = RconService.getInstance();
   }
 
-  private parseLogForErrors(str: string) {
-    if (this.lastCrashDiagnostic) return; // Ya tenemos un error detectado
-
-    this.logBuffer += str;
-    if (this.logBuffer.length > 8192) {
-      this.logBuffer = this.logBuffer.slice(-8192);
+  private parseLogForErrors(str?: string) {
+    if (str) {
+      this.logBuffer += str;
+      if (this.logBuffer.length > 32768) {
+        this.logBuffer = this.logBuffer.slice(-32768);
+      }
     }
+
+    const textToScan = str || this.logBuffer;
+
+    // 1. Check for missing dependencies / loading failures pattern
+    const reqRegex = /Mod\s+([a-zA-Z0-9_-]+)\s+requires\s+([a-zA-Z0-9_-]+)\s+([0-9a-zA-Z.-]+(?:\s+or\s+above[^\n\r]*)?)/gi;
+    const culpritMods = new Set<string>();
+    const missingDeps = new Set<string>();
+    const details: string[] = [];
+
+    let match;
+    while ((match = reqRegex.exec(textToScan)) !== null) {
+      const mod = match[1];
+      const dep = match[2];
+      const ver = match[3].replace(/\s+or\s+above/i, '+').trim();
+
+      culpritMods.add(mod);
+      missingDeps.add(`${dep} ${ver}`);
+      const detailMsg = `Mod '${mod}' requiere la librería '${dep}' (${ver})`;
+      if (!details.includes(detailMsg)) {
+        details.push(detailMsg);
+      }
+    }
+
+    if (culpritMods.size > 0) {
+      this.lastCrashDiagnostic = {
+        modName: Array.from(culpritMods).join(', '),
+        missingDependencies: Array.from(missingDeps),
+        error: 'El servidor no pudo iniciar debido a que faltan librerías y dependencias requeridas por los mods instalados.',
+        solution: `Instala las dependencias requeridas (${Array.from(missingDeps).slice(0, 4).join(', ')}) en la carpeta de mods o desactiva temporalmente los mods que las solicitan.`,
+        details: details.slice(0, 8),
+        severity: 'error',
+      };
+      return;
+    }
+
+    if (this.lastCrashDiagnostic) return; // Ya tenemos un error detectado
 
     for (const rule of this.modErrorPatterns) {
       const patternRegex = new RegExp(rule.pattern, 'i');
@@ -93,7 +131,7 @@ export class ProcessService {
     pid: number | null;
     status: 'online' | 'offline' | 'starting' | 'stopping';
     uptime: number;
-    crashDiagnostic?: { modName: string; error: string; solution: string; severity?: 'error' | 'warning' } | null;
+    crashDiagnostic?: CrashDiagnostic | null;
   } {
     const isRunning = this.serverProcess !== null && !this.serverProcess.killed;
     const uptime = isRunning && this.startTime ? Math.floor((Date.now() - this.startTime) / 1000) : 0;
@@ -137,6 +175,7 @@ export class ProcessService {
       throw new Error('No executable server found. Please install a Minecraft version first.');
     }
 
+    this.isUserStopping = false;
     this.serverStatus = 'starting';
     this.startTime = Date.now();
     this.lastCrashDiagnostic = null;
@@ -173,12 +212,53 @@ export class ProcessService {
         this.parseLogForErrors(str);
       });
 
-      child.on('close', (code) => {
-        console.log(`Server process exited with code ${code}`);
+      child.on('close', async (code) => {
+        console.log(`[ProcessService] Server process exited with code ${code} (previous status: ${this.serverStatus})`);
+        const wasStarting = this.serverStatus === 'starting';
+        const hadDiagnostic = this.lastCrashDiagnostic !== null;
+        const wasUserStopping = this.isUserStopping;
+
         this.serverProcess = null;
         this.serverStatus = 'offline';
         this.startTime = null;
+        this.isUserStopping = false;
         this.rconService.disconnect();
+
+        const config = this.configService.getConfig();
+        const isCrashOrAbnormal = !wasUserStopping && (wasStarting || hadDiagnostic || code !== 0);
+
+        if (config.aiDiagnosticEnabled && isCrashOrAbnormal) {
+          console.log(`[ProcessService] Triggering AI Crash Analysis (code=${code}, wasStarting=${wasStarting}, hadDiagnostic=${hadDiagnostic})...`);
+          const fallbackResult = this.lastCrashDiagnostic; // Save regex result
+          try {
+            const { AiService } = await import('./ai.service');
+            const { ModsService } = await import('./mods.service');
+            const aiService = AiService.getInstance();
+            const modsService = ModsService.getInstance();
+            const mods = modsService.listMods().map(m => m.filename);
+
+            this.lastCrashDiagnostic = {
+              modName: 'Analizando con IA...',
+              error: 'Esperando respuesta de Gemini',
+              solution: 'Leyendo logs del servidor con IA...',
+              severity: 'warning'
+            };
+
+            const crashContext = this.getCrashContext();
+            console.log(`[ProcessService] Sending rich crash context to AI (crashReport: ${Boolean(crashContext.crashReport)}, mods: ${crashContext.mods.length})...`);
+            const aiResult = await aiService.analyzeCrash(crashContext);
+            if (aiResult) {
+              console.log('[ProcessService] AI Diagnosis successfully updated:', aiResult.modName);
+              this.lastCrashDiagnostic = aiResult;
+            } else {
+              console.log('[ProcessService] AI returned null, retaining fallback diagnostic.');
+              this.lastCrashDiagnostic = fallbackResult;
+            }
+          } catch (e) {
+            console.error("[ProcessService] AI crash analysis exception:", e);
+            this.lastCrashDiagnostic = fallbackResult;
+          }
+        }
       });
 
       child.on('error', (err) => {
@@ -187,13 +267,6 @@ export class ProcessService {
         this.serverStatus = 'offline';
         this.startTime = null;
       });
-
-      // After 15 seconds, if still starting, mark online as fallback
-      setTimeout(() => {
-        if (this.serverStatus === 'starting' && this.serverProcess) {
-          this.serverStatus = 'online';
-        }
-      }, 15000);
 
       return { success: true, message: 'Server started successfully' };
     } catch (err: any) {
@@ -209,6 +282,7 @@ export class ProcessService {
       return { success: false, message: 'Server is not running' };
     }
 
+    this.isUserStopping = true;
     this.serverStatus = 'stopping';
 
     // 1. Try graceful RCON /stop
@@ -276,6 +350,123 @@ export class ProcessService {
       return true;
     }
     return false;
+  }
+
+  public getCrashContext(): {
+    logs: string;
+    mods: string[];
+    crashReport?: string;
+    mcVersion?: string;
+    loader?: string;
+    loaderVersion?: string;
+    javaVersion?: string;
+  } {
+    const serverDir = this.configService.getServerDir();
+    const logsDir = path.join(serverDir, 'logs');
+    const crashReportsDir = path.join(serverDir, 'crash-reports');
+
+    // 1. Crash report file check
+    let crashReport = '';
+    if (fs.existsSync(crashReportsDir)) {
+      try {
+        const files = fs.readdirSync(crashReportsDir)
+          .filter(f => f.startsWith('crash-') && f.endsWith('.txt'))
+          .map(f => ({ name: f, time: fs.statSync(path.join(crashReportsDir, f)).mtimeMs }))
+          .sort((a, b) => b.time - a.time);
+        if (files.length > 0 && Date.now() - files[0].time < 48 * 60 * 60 * 1000) {
+          crashReport = fs.readFileSync(path.join(crashReportsDir, files[0].name), 'utf8');
+        }
+      } catch (err) {
+        console.warn('[ProcessService] Could not read crash-reports:', err);
+      }
+    }
+
+    // 2. Logs from disk or buffer
+    let logs = this.logBuffer;
+    const logFile = path.join(logsDir, 'latest.log');
+    if (fs.existsSync(logFile)) {
+      try {
+        const diskLog = fs.readFileSync(logFile, 'utf8');
+        if (diskLog && diskLog.length > 0) {
+          logs = diskLog;
+        }
+      } catch {}
+    }
+
+    // 3. Mods list
+    let mods: string[] = [];
+    try {
+      const modsDir = path.join(serverDir, 'mods');
+      if (fs.existsSync(modsDir)) {
+        mods = fs.readdirSync(modsDir).filter(f => f.endsWith('.jar') || f.endsWith('.disabled'));
+      }
+    } catch {}
+
+    // 4. Version info
+    let mcVersion = '1.21.1';
+    let loader = 'neoforge';
+    let loaderVersion = '';
+    let javaVersion = 'Java 21';
+    try {
+      const { VersionsService } = require('./versions.service');
+      const verInfo = VersionsService.getInstance().getInstalledVersion();
+      if (verInfo) {
+        if (verInfo.mcVersion) mcVersion = verInfo.mcVersion;
+        if (verInfo.loader) loader = verInfo.loader;
+        if (verInfo.loaderVersion) loaderVersion = verInfo.loaderVersion;
+        if (verInfo.javaVersion) javaVersion = verInfo.javaVersion;
+      }
+    } catch {}
+
+    return {
+      logs,
+      mods,
+      crashReport,
+      mcVersion,
+      loader,
+      loaderVersion,
+      javaVersion,
+    };
+  }
+
+  public async triggerAiDiagnostic(): Promise<{ success: boolean; diagnostic: any; message?: string }> {
+    const config = this.configService.getConfig();
+    if (!config.aiDiagnosticEnabled || !config.aiApiKey) {
+      return { success: false, diagnostic: null, message: 'La IA no está habilitada o falta la API Key' };
+    }
+
+    const { AiService } = await import('./ai.service');
+    const aiService = AiService.getInstance();
+
+    this.lastCrashDiagnostic = {
+      modName: 'Analizando con IA...',
+      error: 'Esperando respuesta de Gemini',
+      solution: 'Leyendo logs del servidor con IA...',
+      severity: 'warning'
+    };
+
+    const crashContext = this.getCrashContext();
+    const aiResult = await aiService.analyzeCrash(crashContext);
+    if (aiResult) {
+      this.lastCrashDiagnostic = aiResult;
+      return { success: true, diagnostic: aiResult };
+    } else {
+      // Fallback to our enhanced parser so user is never left with an empty or ambiguous diagnostic
+      this.lastCrashDiagnostic = null;
+      this.parseLogForErrors(crashContext.crashReport || crashContext.logs);
+      if (this.lastCrashDiagnostic) {
+        return { 
+          success: true, 
+          diagnostic: this.lastCrashDiagnostic, 
+          message: 'Diagnóstico contextual generado exitosamente (Gemini experimenta alta demanda 503)' 
+        };
+      }
+      return { 
+        success: false, 
+        diagnostic: null, 
+        message: 'No se pudo generar el diagnóstico en este momento' 
+      };
+    }
   }
 
   private async waitForExit(timeoutMs: number): Promise<boolean> {

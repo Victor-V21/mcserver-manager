@@ -84,6 +84,17 @@ export class ConfigService {
     this.saveConfig(this.config);
   }
 
+  public setAiSettings(enabled: boolean, apiKey?: string, model?: string): void {
+    this.config.aiDiagnosticEnabled = enabled;
+    if (apiKey !== undefined) {
+      this.config.aiApiKey = apiKey;
+    }
+    if (model !== undefined) {
+      this.config.aiModel = model;
+    }
+    this.saveConfig(this.config);
+  }
+
   public getRootPath(): string {
     return this.config.rootPath;
   }

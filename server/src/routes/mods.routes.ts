@@ -111,4 +111,26 @@ router.delete('/:filename', (req: Request, res: Response) => {
   }
 });
 
+// POST /api/mods/disable-all
+router.post('/disable-all', (_req: Request, res: Response) => {
+  try {
+    const result = modsService.disableAllMods();
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Error al desactivar todos los mods' });
+  }
+});
+
+// POST /api/mods/delete-all & DELETE /api/mods/all
+const deleteAllHandler = (_req: Request, res: Response) => {
+  try {
+    const result = modsService.deleteAllMods();
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Error al eliminar todos los mods' });
+  }
+};
+router.post('/delete-all', deleteAllHandler);
+router.delete('/all', deleteAllHandler);
+
 export default router;

@@ -4,6 +4,18 @@ export interface PanelConfig {
   jwtSecret: string;
   passwordHash: string;
   initialSetupDone: boolean;
+  aiDiagnosticEnabled?: boolean;
+  aiApiKey?: string;
+  aiModel?: string;
+}
+
+export interface CrashDiagnostic {
+  modName: string;
+  error: string;
+  solution: string;
+  severity?: 'error' | 'warning';
+  missingDependencies?: string[];
+  details?: string[];
 }
 
 export interface ServerStatusResponse {
@@ -47,11 +59,7 @@ export interface ServerStatusResponse {
     list: PlayerInfo[];
   };
   installedVersion?: any;
-  crashDiagnostic?: {
-    modName: string;
-    error: string;
-    solution: string;
-  } | null;
+  crashDiagnostic?: CrashDiagnostic | null;
 }
 
 export interface PlayerInfo {

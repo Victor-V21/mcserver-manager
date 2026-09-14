@@ -133,4 +133,48 @@ export class ModsService {
     }
     return false;
   }
+
+  public disableAllMods(): { success: boolean; count: number } {
+    const dir = this.getModsDir();
+    if (!fs.existsSync(dir)) return { success: true, count: 0 };
+
+    let count = 0;
+    const files = fs.readdirSync(dir);
+    for (const file of files) {
+      if (file.endsWith('.jar') && !file.endsWith('.jar.disabled')) {
+        const oldPath = path.join(dir, file);
+        const newPath = path.join(dir, `${file}.disabled`);
+        try {
+          fs.renameSync(oldPath, newPath);
+          count++;
+        } catch (e) {
+          console.error(`Error disabling mod ${file}:`, e);
+        }
+      }
+    }
+    return { success: true, count };
+  }
+
+  public deleteAllMods(): { success: boolean; count: number } {
+    const dir = this.getModsDir();
+    if (!fs.existsSync(dir)) return { success: true, count: 0 };
+
+    let count = 0;
+    const files = fs.readdirSync(dir);
+    for (const file of files) {
+      if (file.endsWith('.jar') || file.endsWith('.jar.disabled')) {
+        const filePath = path.join(dir, file);
+        try {
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+            count++;
+          }
+        } catch (e) {
+          console.error(`Error deleting mod ${file}:`, e);
+        }
+      }
+    }
+    return { success: true, count };
+  }
 }
+

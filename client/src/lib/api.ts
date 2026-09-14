@@ -98,6 +98,13 @@ export const api = {
     });
   },
 
+  // AI Diagnostic
+  triggerAiDiagnosis: async (): Promise<{ success: boolean; diagnostic?: any; message?: string }> => {
+    return request('/api/status/diagnose-ai', {
+      method: 'POST',
+    });
+  },
+
   // RCON Command
   sendCommand: async (command: string): Promise<{ success: boolean; response?: string }> => {
     return request('/api/server/command', {
@@ -205,6 +212,16 @@ export const api = {
     return request('/api/mods/rename', {
       method: 'PATCH',
       body: JSON.stringify({ oldFilename, newFilename }),
+    });
+  },
+  disableAllMods: async (): Promise<{ success: boolean; count: number }> => {
+    return request('/api/mods/disable-all', {
+      method: 'POST',
+    });
+  },
+  deleteAllMods: async (): Promise<{ success: boolean; count: number }> => {
+    return request('/api/mods/delete-all', {
+      method: 'POST',
     });
   },
   uploadMod: async (file: File): Promise<{ success: boolean; filename: string }> => {

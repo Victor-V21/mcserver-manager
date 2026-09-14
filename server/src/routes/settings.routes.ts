@@ -26,24 +26,32 @@ router.get('/', (_req: Request, res: Response) => {
     rconPort: 25575,
     rconHost: '127.0.0.1',
     maxMemoryAllocated: '8192M',
+    aiDiagnosticEnabled: config.aiDiagnosticEnabled,
+    aiApiKey: config.aiApiKey,
+    aiModel: config.aiModel || 'gemini-3-flash-preview',
   });
 });
 
 // POST /api/settings
 router.post('/', (req: Request, res: Response) => {
+  // Update root path if provided
   const rootPath = req.body.serverRootPath || req.body.rootPath;
-  if (!rootPath || typeof rootPath !== 'string') {
-    res.status(400).json({ error: 'Valid rootPath string is required' });
-    return;
+  if (rootPath && typeof rootPath === 'string') {
+    const result = configService.setRootPath(rootPath);
+    if (!result.success) {
+      res.status(400).json({ error: result.message || 'Failed to update root path' });
+      return;
+    }
   }
 
-  const result = configService.setRootPath(rootPath);
-  if (!result.success) {
-    res.status(400).json({ error: result.message || 'Failed to update root path' });
-    return;
+  // Update AI settings if provided
+  if (req.body.aiDiagnosticEnabled !== undefined) {
+    configService.setAiSettings(req.body.aiDiagnosticEnabled, req.body.aiApiKey, req.body.aiModel);
   }
 
   const dirs = configService.validateDirectories();
+  const config = configService.getConfig();
+  
   const settings = {
     serverRootPath: configService.getRootPath(),
     rootPath: configService.getRootPath(),
@@ -60,6 +68,9 @@ router.post('/', (req: Request, res: Response) => {
     rconPort: 25575,
     rconHost: '127.0.0.1',
     maxMemoryAllocated: '8192M',
+    aiDiagnosticEnabled: config.aiDiagnosticEnabled,
+    aiApiKey: config.aiApiKey,
+    aiModel: config.aiModel || 'gemini-3-flash-preview',
   };
 
   res.json({
