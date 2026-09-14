@@ -28,7 +28,16 @@ export function useConsoleWs() {
       };
 
       socket.onmessage = (event) => {
-        addLogLine(event.data);
+        try {
+          const parsed = JSON.parse(event.data);
+          if (parsed.type === 'log' && typeof parsed.data === 'string') {
+            addLogLine(parsed.data);
+          } else {
+            addLogLine(event.data);
+          }
+        } catch {
+          addLogLine(event.data);
+        }
       };
 
       socket.onerror = () => {

@@ -83,6 +83,7 @@ const getCurrentHandler = (_req: Request, res: Response) => {
   }
 };
 
+router.get('/', getCurrentHandler);
 router.get('/current', getCurrentHandler);
 router.get('/installed', getCurrentHandler);
 

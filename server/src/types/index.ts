@@ -47,6 +47,11 @@ export interface ServerStatusResponse {
     list: PlayerInfo[];
   };
   installedVersion?: any;
+  crashDiagnostic?: {
+    modName: string;
+    error: string;
+    solution: string;
+  } | null;
 }
 
 export interface PlayerInfo {

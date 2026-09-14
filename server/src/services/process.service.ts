@@ -4,6 +4,7 @@ import { spawn, ChildProcess } from 'child_process';
 import { ConfigService } from './config.service';
 import { RconService } from './rcon.service';
 import { SUBDIRS } from '../config/constants';
+import modErrors from '../data/mod-errors.json';
 
 export class ProcessService {
   private static instance: ProcessService;
@@ -12,10 +13,72 @@ export class ProcessService {
   private serverProcess: ChildProcess | null = null;
   private serverStatus: 'online' | 'offline' | 'starting' | 'stopping' = 'offline';
   private startTime: number | null = null;
+  private lastCrashDiagnostic: { modName: string; error: string; solution: string } | null = null;
+  private modErrorPatterns: any[] = modErrors;
+  private logBuffer: string = '';
 
   private constructor() {
     this.configService = ConfigService.getInstance();
     this.rconService = RconService.getInstance();
+  }
+
+  private parseLogForErrors(str: string) {
+    if (this.lastCrashDiagnostic) return; // Ya tenemos un error detectado
+
+    this.logBuffer += str;
+    if (this.logBuffer.length > 8192) {
+      this.logBuffer = this.logBuffer.slice(-8192);
+    }
+
+    for (const rule of this.modErrorPatterns) {
+      const patternRegex = new RegExp(rule.pattern, 'i');
+      const errorMatch = patternRegex.exec(this.logBuffer);
+      
+      if (errorMatch) {
+        const logAfterError = this.logBuffer.slice(errorMatch.index);
+        const modRegex = new RegExp(rule.modRegex, 'ig');
+        const matches = [...logAfterError.matchAll(modRegex)];
+        
+        if (matches.length > 0) {
+          let modNames = [];
+          let version = '';
+          
+          for (const match of matches) {
+            let name = 'Desconocido';
+            for (let i = 1; i < match.length; i++) {
+              if (match[i]) {
+                name = match[i];
+                if ((rule.pattern.includes('Missing') || rule.pattern.includes('ModLoadingException')) && i === 1 && match[2]) {
+                   version = match[2];
+                }
+                break;
+              }
+            }
+            name = name.replace(/(_service|\.jar)$/i, '').split('@')[0];
+            modNames.push(name);
+          }
+          
+          const uniqueModNames = [...new Set(modNames)];
+          const modName = uniqueModNames.join(',');
+          
+          let solution = rule.solution;
+          if (version) {
+            solution = solution.replace('$VERSION', version);
+          } else {
+            solution = solution.replace('$VERSION', 'específica');
+          }
+
+          this.lastCrashDiagnostic = {
+            modName,
+            error: rule.pattern,
+            solution,
+            severity: rule.severity || 'error',
+          } as any;
+          
+          break;
+        }
+      }
+    }
   }
 
   public static getInstance(): ProcessService {
@@ -30,6 +93,7 @@ export class ProcessService {
     pid: number | null;
     status: 'online' | 'offline' | 'starting' | 'stopping';
     uptime: number;
+    crashDiagnostic?: { modName: string; error: string; solution: string; severity?: 'error' | 'warning' } | null;
   } {
     const isRunning = this.serverProcess !== null && !this.serverProcess.killed;
     const uptime = isRunning && this.startTime ? Math.floor((Date.now() - this.startTime) / 1000) : 0;
@@ -38,6 +102,7 @@ export class ProcessService {
       pid: this.serverProcess ? this.serverProcess.pid || null : null,
       status: this.serverStatus,
       uptime,
+      crashDiagnostic: this.lastCrashDiagnostic,
     };
   }
 
@@ -74,6 +139,8 @@ export class ProcessService {
 
     this.serverStatus = 'starting';
     this.startTime = Date.now();
+    this.lastCrashDiagnostic = null;
+    this.logBuffer = '';
 
     // Ensure logs directory exists
     const logsDir = path.join(serverDir, 'logs');
@@ -93,13 +160,17 @@ export class ProcessService {
       child.stdout.on('data', (chunk) => {
         logStream.write(chunk);
         const str = chunk.toString();
+        this.parseLogForErrors(str);
         if (str.includes('Done (') || str.includes('! For help, type "help"') || str.includes('Server started')) {
           this.serverStatus = 'online';
+          this.lastCrashDiagnostic = null; // Clean if successfully started
         }
       });
 
       child.stderr.on('data', (chunk) => {
         logStream.write(chunk);
+        const str = chunk.toString();
+        this.parseLogForErrors(str);
       });
 
       child.on('close', (code) => {

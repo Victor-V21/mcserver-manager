@@ -117,7 +117,7 @@ export const App: React.FC = () => {
 
           {currentTab === 'players' && <PlayersView />}
 
-          {currentTab === 'mods' && <ModsView />}
+          {currentTab === 'mods' && <ModsView telemetry={telemetry || null} />}
 
           {currentTab === 'files' && <FilesView />}
 

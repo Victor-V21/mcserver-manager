@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { TelemetryData, PlayitStatus } from '../../lib/types';
 import { MetricGauge } from '../../components/common/MetricGauge';
 import { ConnectedPlayersList } from './ConnectedPlayersList';
@@ -24,6 +24,7 @@ import {
   Radio,
   ExternalLink,
   ChevronRight,
+  AlertTriangle,
 } from 'lucide-react';
 
 interface DashboardViewProps {
@@ -200,6 +201,84 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
+      {/* Crash Diagnostic Banner */}
+      <AnimatePresence>
+        {!isOnline && telemetry?.crashDiagnostic && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, height: 0 }}
+            animate={{ opacity: 1, y: 0, height: 'auto' }}
+            exit={{ opacity: 0, y: -20, height: 0 }}
+            className="mb-4"
+          >
+            <div className={`glass-panel border rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row gap-4 items-start sm:items-center ${
+              telemetry.crashDiagnostic.severity === 'warning'
+                ? 'border-amber-500/30 bg-amber-500/5'
+                : 'border-red-500/30 bg-red-500/5'
+            }`}>
+              <div className={`p-3 rounded-xl shrink-0 ${
+                telemetry.crashDiagnostic.severity === 'warning'
+                  ? 'bg-amber-500/20 text-amber-400'
+                  : 'bg-red-500/20 text-red-400'
+              }`}>
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div className="flex-1 w-full overflow-hidden">
+                <h3 className={`font-bold text-base mb-1 ${
+                  telemetry.crashDiagnostic.severity === 'warning' ? 'text-amber-400' : 'text-red-400'
+                }`}>
+                  {telemetry.crashDiagnostic.severity === 'warning' ? 'Problema de Dependencias Detectado' : 'Crasheo detectado durante el inicio'}
+                </h3>
+                
+                <div className="mb-2">
+                  <span className="font-semibold text-white text-sm mb-1 block">Mod(s) problemático(s):</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {telemetry.crashDiagnostic.modName.split(',').map((mod, idx) => (
+                      <span 
+                        key={idx} 
+                        className={`px-2 py-0.5 rounded-md font-mono text-xs ${
+                          telemetry.crashDiagnostic.severity === 'warning' 
+                            ? 'bg-amber-500/10 border border-amber-500/20 text-amber-200' 
+                            : 'bg-red-500/10 border border-red-500/20 text-red-200'
+                        }`}
+                      >
+                        {mod.trim()}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <p className={`text-sm ${
+                  telemetry.crashDiagnostic.severity === 'warning' ? 'text-amber-300' : 'text-red-300'
+                }`}>
+                  {telemetry.crashDiagnostic.solution}
+                </p>
+              </div>
+              
+              <div className="flex sm:flex-col gap-2 shrink-0 w-full sm:w-auto">
+                {telemetry.crashDiagnostic.severity === 'warning' && (
+                  <GlassShimmerButton
+                    variant="amber"
+                    size="sm"
+                    onClick={() => onNavigateTab('versions')}
+                    className="flex-1 sm:flex-none justify-center"
+                  >
+                    Actualizar NeoForge
+                  </GlassShimmerButton>
+                )}
+                <GlassShimmerButton
+                  variant={telemetry.crashDiagnostic.severity === 'warning' ? 'default' : 'danger'}
+                  size="sm"
+                  onClick={() => onNavigateTab('mods')}
+                  className="flex-1 sm:flex-none justify-center"
+                >
+                  Gestionar Mods
+                </GlassShimmerButton>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Telemetry Resource Gauges Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* CPU */}
@@ -251,20 +330,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             telemetry?.disk?.serverSizeFormatted ||
             (telemetry?.disk?.serverSizeMb
               ? `${telemetry.disk.serverSizeMb} MB`
-              : telemetry?.disk?.used
-              ? `${telemetry.disk.used} GB`
               : '-- MB')
           }
-          subtitle={
-            telemetry?.disk
-              ? `Libre en disco: ${telemetry.disk.free} GB de ${telemetry.disk.total} GB`
-              : 'Consultando espacio...'
-          }
-          percentage={
-            telemetry?.disk
-              ? (telemetry.disk.used / telemetry.disk.total) * 100
-              : 0
-          }
+          subtitle="Tamaño total de los archivos del servidor"
+          percentage={0} // No mostramos barra de porcentaje por ser variable
           icon={RareDiskIcon as any}
           variant="indigo"
         />

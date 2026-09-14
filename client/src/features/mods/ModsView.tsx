@@ -19,11 +19,17 @@ import {
   X,
 } from 'lucide-react';
 
-export const ModsView: React.FC = () => {
+interface ModsViewProps {
+  telemetry?: any;
+}
+
+export const ModsView: React.FC<ModsViewProps> = ({ telemetry }) => {
   const [mods, setMods] = useState<ModFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'enabled' | 'disabled'>('all');
+
+  const errorModName = telemetry?.crashDiagnostic?.modName?.toLowerCase() || '';
 
   // Notification and Restart State
   const [notice, setNotice] = useState<{
@@ -35,7 +41,7 @@ export const ModsView: React.FC = () => {
   // Upload state
   const [isDragging, setIsDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<{ [key: string]: number }>({});
+  const [uploadStats, setUploadStats] = useState<{ total: number; uploaded: number; pct: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Modals
@@ -47,8 +53,8 @@ export const ModsView: React.FC = () => {
     loadMods();
   }, []);
 
-  const loadMods = async () => {
-    setLoading(true);
+  const loadMods = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const data = await api.getMods();
       // Ensure each item has both filename and name populated
@@ -64,7 +70,7 @@ export const ModsView: React.FC = () => {
         message: err.message || 'Error al cargar la lista de mods',
       });
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -77,7 +83,7 @@ export const ModsView: React.FC = () => {
         type: 'warning',
         message: `Mod "${mod.name}" ${nextState ? 'activado' : 'desactivado'}. Es necesario reiniciar el servidor para que los cambios se apliquen en Minecraft.`,
       });
-      await loadMods();
+      await loadMods(true);
     } catch (err: any) {
       setNotice({
         type: 'error',
@@ -96,7 +102,7 @@ export const ModsView: React.FC = () => {
         message: `Mod "${modToDelete.name}" eliminado del disco. Es necesario reiniciar el servidor para que los cambios se apliquen en Minecraft.`,
       });
       setModToDelete(null);
-      await loadMods();
+      await loadMods(true);
     } catch (err: any) {
       setNotice({
         type: 'error',
@@ -117,7 +123,7 @@ export const ModsView: React.FC = () => {
       });
       setModToRename(null);
       setNewFilename('');
-      await loadMods();
+      await loadMods(true);
     } catch (err: any) {
       setNotice({
         type: 'error',
@@ -146,21 +152,22 @@ export const ModsView: React.FC = () => {
 
   const handleFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
+    const validFiles = Array.from(files).filter(f => f.name.endsWith('.jar') || f.name.endsWith('.jar.disabled'));
+    if (validFiles.length === 0) return;
+    
     setUploading(true);
+    setUploadStats({ total: validFiles.length, uploaded: 0, pct: 0 });
 
     let uploadedCount = 0;
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      if (!file.name.endsWith('.jar') && !file.name.endsWith('.jar.disabled')) {
-        continue;
-      }
-      setUploadProgress((prev) => ({ ...prev, [file.name]: 30 }));
+    for (let i = 0; i < validFiles.length; i++) {
+      const file = validFiles[i];
+      setUploadStats({ total: validFiles.length, uploaded: uploadedCount, pct: 30 });
       await new Promise((r) => setTimeout(r, 200));
-      setUploadProgress((prev) => ({ ...prev, [file.name]: 75 }));
+      setUploadStats({ total: validFiles.length, uploaded: uploadedCount, pct: 75 });
       try {
         await api.uploadMod(file);
         uploadedCount++;
-        setUploadProgress((prev) => ({ ...prev, [file.name]: 100 }));
+        setUploadStats({ total: validFiles.length, uploaded: uploadedCount, pct: 100 });
       } catch (err: any) {
         setNotice({
           type: 'error',
@@ -171,14 +178,14 @@ export const ModsView: React.FC = () => {
 
     await new Promise((r) => setTimeout(r, 400));
     setUploading(false);
-    setUploadProgress({});
+    setUploadStats(null);
     if (uploadedCount > 0) {
       setNotice({
         type: 'warning',
         message: `${uploadedCount} mod(s) subido(s) exitosamente. Es necesario reiniciar el servidor para que los cambios se apliquen en Minecraft.`,
       });
     }
-    loadMods();
+    loadMods(true);
   };
 
   const formatFileSize = (bytes: number) => {
@@ -347,23 +354,25 @@ export const ModsView: React.FC = () => {
       </div>
 
       {/* Upload Progress bars if any */}
-      {uploading && Object.keys(uploadProgress).length > 0 && (
-        <div className="glass-panel rounded-2xl p-4 border border-slate-800 space-y-2">
-          <span className="text-xs font-semibold text-emerald-400 flex items-center gap-1.5">
-            <div className="w-3.5 h-3.5 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
-            <span>Subiendo archivos a server/mods/...</span>
-          </span>
-          {Object.entries(uploadProgress).map(([fileName, pct]) => (
-            <div key={fileName} className="space-y-1">
-              <div className="flex justify-between text-[11px] font-mono text-slate-400">
-                <span className="truncate max-w-xs">{fileName}</span>
-                <span>{pct}%</span>
-              </div>
-              <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                <div className="bg-emerald-500 h-full transition-all" style={{ width: `${pct}%` }} />
-              </div>
+      {uploading && uploadStats && (
+        <div className="glass-panel rounded-2xl p-4 border border-slate-800 space-y-3">
+          <span className="text-xs font-semibold text-emerald-400 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-3.5 h-3.5 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
+              <span>Subiendo archivos a server/mods/...</span>
             </div>
-          ))}
+            <span className="text-slate-300 font-mono text-[11px]">
+              {uploadStats.uploaded} de {uploadStats.total} mods cargados
+            </span>
+          </span>
+          <div className="space-y-1">
+            <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden relative">
+              <div 
+                className="bg-emerald-500 h-full transition-all duration-300" 
+                style={{ width: `${Math.max(5, (uploadStats.uploaded / uploadStats.total) * 100)}%` }} 
+              />
+            </div>
+          </div>
         </div>
       )}
 
@@ -415,8 +424,21 @@ export const ModsView: React.FC = () => {
               ) : (
                 filteredMods.map((mod) => {
                   const fileKey = mod.filename || mod.name;
+                  const errorModNames = errorModName ? errorModName.split(',').map(n => n.trim()) : [];
+                  const isErrorMod = errorModNames.some(name => 
+                    mod.name.toLowerCase() === name || 
+                    mod.filename.toLowerCase() === `${name}.jar` ||
+                    mod.filename.toLowerCase().startsWith(`${name}-`) ||
+                    mod.filename.toLowerCase().startsWith(`${name} `)
+                  );
+                  const isWarning = isErrorMod && telemetry?.crashDiagnostic?.severity === 'warning';
+                  
                   return (
-                    <tr key={fileKey} className="hover:bg-slate-800/30 transition-colors group">
+                    <tr key={fileKey} className={`transition-colors group ${
+                      isErrorMod 
+                        ? (isWarning ? 'bg-amber-500/10 hover:bg-amber-500/20' : 'bg-rose-500/10 hover:bg-rose-500/20') 
+                        : 'hover:bg-slate-800/30'
+                    }`}>
                       <td className="p-3.5">
                         {/* Toggle switch */}
                         <button
@@ -438,7 +460,9 @@ export const ModsView: React.FC = () => {
                         <div className="flex items-center gap-2.5">
                           <div
                             className={`p-1.5 rounded-lg ${
-                              mod.isEnabled
+                              isErrorMod
+                                ? (isWarning ? 'bg-amber-500/20 text-amber-400' : 'bg-rose-500/20 text-rose-400')
+                                : mod.isEnabled
                                 ? 'bg-emerald-500/10 text-emerald-400'
                                 : 'bg-slate-800 text-slate-500'
                             }`}
@@ -447,11 +471,22 @@ export const ModsView: React.FC = () => {
                           </div>
                           <div>
                             <span
-                              className={`font-semibold text-xs block ${
-                                mod.isEnabled ? 'text-white' : 'text-slate-400 line-through'
+                              className={`font-semibold text-xs flex items-center gap-2 ${
+                                isErrorMod
+                                  ? (isWarning ? 'text-amber-400' : 'text-rose-400')
+                                  : mod.isEnabled
+                                  ? 'text-white'
+                                  : 'text-slate-400 line-through'
                               }`}
                             >
                               {mod.name}
+                              {isErrorMod && (
+                                <span className={`px-1.5 py-0.5 rounded font-mono text-[10px] ${
+                                  isWarning ? 'bg-amber-500/20 text-amber-300' : 'bg-rose-500/20 text-rose-300'
+                                }`}>
+                                  {isWarning ? 'Advertencia' : 'Error Detectado'}
+                                </span>
+                              )}
                             </span>
                             {mod.filename && mod.filename !== mod.name && (
                               <span className="text-[11px] font-mono text-slate-500 block">

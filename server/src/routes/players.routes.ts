@@ -89,12 +89,70 @@ router.delete('/whitelist/:name', async (req: Request, res: Response) => {
 });
 
 // --- BANS ---
+router.get('/bans', (_req: Request, res: Response) => {
+  try {
+    const players = playersService.getBannedPlayers();
+    const ips = playersService.getBannedIps();
+    res.json({ players, ips });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to fetch bans' });
+  }
+});
+
 router.get('/banned', (_req: Request, res: Response) => {
   try {
     const bans = playersService.getBannedPlayers();
     res.json(bans);
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to fetch bans' });
+  }
+});
+
+router.delete('/bans/player/:name', async (req: Request, res: Response) => {
+  const { name } = req.params;
+  try {
+    const success = playersService.removeBan(name);
+    if (rconService.isConnected()) {
+      try {
+        await rconService.sendCommand(`pardon ${name}`);
+      } catch {}
+    }
+    res.json({ success });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to unban player' });
+  }
+});
+
+router.delete('/bans/ip/:ip', async (req: Request, res: Response) => {
+  const { ip } = req.params;
+  try {
+    const success = playersService.removeBanIp(ip);
+    if (rconService.isConnected()) {
+      try {
+        await rconService.sendCommand(`pardon-ip ${ip}`);
+      } catch {}
+    }
+    res.json({ success });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to unban IP' });
+  }
+});
+
+// --- KICK ---
+router.post('/kick', async (req: Request, res: Response) => {
+  const { name, reason } = req.body;
+  if (!name) {
+    res.status(400).json({ error: 'Player name is required' });
+    return;
+  }
+  try {
+    if (rconService.isConnected()) {
+      const cmd = reason ? `kick ${name} ${reason}` : `kick ${name}`;
+      await rconService.sendCommand(cmd);
+    }
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to kick player' });
   }
 });
 

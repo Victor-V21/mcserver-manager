@@ -208,4 +208,37 @@ export class PlayersService {
     }
     return false;
   }
+
+  public getBannedIps(): BanEntry[] {
+    return this.readJsonFile<BanEntry[]>(SUBDIRS.BANNED_IPS, []);
+  }
+
+  public addBanIp(ip: string, reason: string = 'Banned by operator'): BanEntry {
+    const bans = this.getBannedIps();
+    const entry: BanEntry = {
+      ip,
+      created: new Date().toISOString().replace('T', ' ').slice(0, 19) + ' +0000',
+      source: 'Server Operator',
+      expires: 'forever',
+      reason,
+    };
+    const existingIdx = bans.findIndex((b) => b.ip === ip);
+    if (existingIdx !== -1) {
+      bans[existingIdx] = entry;
+    } else {
+      bans.push(entry);
+    }
+    this.writeJsonFile(SUBDIRS.BANNED_IPS, bans);
+    return entry;
+  }
+
+  public removeBanIp(ip: string): boolean {
+    const bans = this.getBannedIps();
+    const filtered = bans.filter((b) => b.ip !== ip);
+    if (filtered.length !== bans.length) {
+      this.writeJsonFile(SUBDIRS.BANNED_IPS, filtered);
+      return true;
+    }
+    return false;
+  }
 }

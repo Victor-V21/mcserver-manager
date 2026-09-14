@@ -3,6 +3,7 @@ import path from 'path';
 import { execSync } from 'child_process';
 import si from 'systeminformation';
 import pidusage from 'pidusage';
+import os from 'os';
 import { ConfigService } from './config.service';
 import { ProcessService } from './process.service';
 import { RconService } from './rcon.service';
@@ -157,7 +158,8 @@ export class MonitorService {
         const javaPid = this.getJavaPid(procStatus.pid);
         const stats = await pidusage(javaPid);
         if (stats) {
-          javaCpu = Math.round((stats.cpu || 0) * 10) / 10;
+          const numCores = os.cpus().length || 1;
+          javaCpu = Math.round((stats.cpu / numCores) * 10) / 10;
           javaMemMb = Math.round((stats.memory || 0) / (1024 * 1024));
         }
       } catch {}
@@ -166,19 +168,7 @@ export class MonitorService {
     const ramUsed = procStatus.isRunning ? javaMemMb : 0;
     const ramPercent = maxAllocatedRamMb > 0 ? Math.min(100, Math.round((ramUsed / maxAllocatedRamMb) * 100)) : 0;
 
-    // 3. Partition disk & Server folder footprint
-    try {
-      const fsSize = await si.fsSize();
-      if (Array.isArray(fsSize) && fsSize.length > 0) {
-        const mount = fsSize.find((f) => rootPath.startsWith(f.mount)) || fsSize[0];
-        if (mount) {
-          diskTotal = Math.round((mount.size || 0) / (1024 * 1024 * 1024)); // GB
-          diskUsed = Math.round((mount.used || 0) / (1024 * 1024 * 1024)); // GB
-          diskPercent = Math.round(mount.use || 0);
-        }
-      }
-    } catch {}
-
+    // 3. Server folder footprint (No longer reading host disk size)
     const serverDirSize = this.getServerDirSize(serverDir);
 
     // 4. Server max players from properties
@@ -292,10 +282,10 @@ export class MonitorService {
         systemPercent: memPercent,
       },
       disk: {
-        used: diskUsed, // Host disk partition used (GB)
-        total: diskTotal, // Host disk partition total (GB)
-        free: Math.max(0, diskTotal - diskUsed),
-        percent: diskPercent,
+        used: serverDirSize.mb / 1024, // Just a placeholder if they use 'used', we report in GB
+        total: 0,
+        free: 0,
+        percent: 0,
         serverSizeMb: serverDirSize.mb, // Real Minecraft server folder size (MB)
         serverSizeFormatted: serverDirSize.formatted, // e.g. "180 MB"
       },
@@ -309,6 +299,7 @@ export class MonitorService {
         max: maxPlayers,
         list: playerList,
       },
+      crashDiagnostic: (procStatus as any).crashDiagnostic || null,
     };
   }
 }
