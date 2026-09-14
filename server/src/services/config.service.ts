@@ -116,8 +116,20 @@ export class ConfigService {
       return standardServerDir;
     }
 
-    // 3. If root itself contains server files (e.g. libraries, server.properties, run.sh, eula.txt)
-    const indicators = ['server.properties', 'libraries', 'run.sh', 'eula.txt', 'version-info.json'];
+    // 3. If root itself contains server files (e.g. server.properties, server.jar, mods, run.sh, eula.txt, etc.)
+    const indicators = [
+      'server.properties',
+      'server.jar',
+      'mods',
+      'libraries',
+      'run.sh',
+      'start.sh',
+      'run.bat',
+      'start.bat',
+      'eula.txt',
+      'world',
+      'version-info.json',
+    ];
     const hasIndicators = indicators.some((f) => fs.existsSync(path.join(root, f)));
     if (hasIndicators) {
       return root;

@@ -108,6 +108,97 @@ router.post('/validate-path', (req: Request, res: Response) => {
   }
 });
 
+const MC_CANDIDATE_FILES = [
+  'server',
+  'server.jar',
+  'mods',
+  'server.properties',
+  'run.sh',
+  'start.sh',
+  'run.bat',
+  'start.bat',
+  'eula.txt',
+  'libraries',
+  'world',
+  'paper.jar',
+  'spigot.jar',
+  'forge.jar',
+  'neoforge.jar',
+  'fabric-server-launch.jar',
+];
+
+function checkIsMinecraftDir(dirPath: string): boolean {
+  try {
+    for (const f of MC_CANDIDATE_FILES) {
+      if (fs.existsSync(path.join(dirPath, f))) {
+        return true;
+      }
+    }
+  } catch {}
+  return false;
+}
+
+function getSystemShortcuts(): { label: string; path: string; exists: boolean }[] {
+  const shortcuts: { label: string; path: string; exists: boolean }[] = [];
+
+  // 1. Host user directories (/home)
+  if (fs.existsSync('/home')) {
+    shortcuts.push({ label: 'Host (/home)', path: '/home', exists: true });
+    try {
+      const homeEntries = fs.readdirSync('/home', { withFileTypes: true });
+      for (const entry of homeEntries) {
+        if (entry.isDirectory()) {
+          const userHome = path.join('/home', entry.name);
+          shortcuts.push({ label: `/home/${entry.name}`, path: userHome, exists: true });
+        }
+      }
+    } catch {}
+  }
+
+  // 2. Alternative host mount paths if mounted as /host or /host/home
+  if (fs.existsSync('/host/home')) {
+    shortcuts.push({ label: 'Host (/host/home)', path: '/host/home', exists: true });
+  } else if (fs.existsSync('/host')) {
+    shortcuts.push({ label: 'Host (/host)', path: '/host', exists: true });
+  }
+
+  // 3. Docker persistent data directory
+  if (fs.existsSync('/data')) {
+    shortcuts.push({ label: '/data (Docker)', path: '/data', exists: true });
+  }
+
+  // 4. Container app directory
+  if (fs.existsSync('/app')) {
+    shortcuts.push({ label: '/app', path: '/app', exists: true });
+  }
+
+  // 5. Root directory
+  shortcuts.push({ label: '/ (Raíz)', path: '/', exists: true });
+
+  return shortcuts;
+}
+
+function checkDockerMountStatus(): { isDocker: boolean; isHomeMounted: boolean } {
+  const isDocker = fs.existsSync('/.dockerenv') || fs.existsSync('/data');
+  let isHomeMounted = false;
+  try {
+    if (fs.existsSync('/proc/mounts')) {
+      const mounts = fs.readFileSync('/proc/mounts', 'utf-8');
+      isHomeMounted = mounts.split('\n').some((line) => {
+        const parts = line.split(' ');
+        const mountPoint = parts[1];
+        return (
+          mountPoint === '/home' ||
+          mountPoint?.startsWith('/home/') ||
+          mountPoint === '/host' ||
+          mountPoint?.startsWith('/host/')
+        );
+      });
+    }
+  } catch {}
+  return { isDocker, isHomeMounted };
+}
+
 // POST /api/settings/browse-dirs
 router.post('/browse-dirs', (req: Request, res: Response) => {
   let requestedPath = req.body.path;
@@ -115,6 +206,8 @@ router.post('/browse-dirs', (req: Request, res: Response) => {
     const configuredRoot = configService.getRootPath();
     if (fs.existsSync(configuredRoot)) {
       requestedPath = configuredRoot;
+    } else if (fs.existsSync('/home')) {
+      requestedPath = '/home';
     } else if (fs.existsSync('/data')) {
       requestedPath = '/data';
     } else {
@@ -123,6 +216,8 @@ router.post('/browse-dirs', (req: Request, res: Response) => {
   }
 
   const targetPath = path.resolve(requestedPath);
+  const { isDocker, isHomeMounted } = checkDockerMountStatus();
+  const shortcuts = getSystemShortcuts();
 
   if (!fs.existsSync(targetPath)) {
     const parent = targetPath === '/' ? null : path.dirname(targetPath);
@@ -134,12 +229,9 @@ router.post('/browse-dirs', (req: Request, res: Response) => {
       directories: [],
       hasMinecraftFiles: false,
       error: `La ruta "${targetPath}" no existe dentro del contenedor.`,
-      shortcuts: [
-        { label: '/data (Docker)', path: '/data', exists: fs.existsSync('/data') },
-        { label: '/home', path: '/home', exists: fs.existsSync('/home') },
-        { label: '/app', path: '/app', exists: fs.existsSync('/app') },
-        { label: '/ (Raíz)', path: '/', exists: true },
-      ],
+      shortcuts,
+      isDocker,
+      isHomeMounted,
     });
     return;
   }
@@ -157,14 +249,7 @@ router.post('/browse-dirs', (req: Request, res: Response) => {
     for (const entry of entries) {
       if (entry.isDirectory()) {
         const fullSub = path.join(targetPath, entry.name);
-        let isMinecraftCandidate = false;
-        try {
-          isMinecraftCandidate =
-            fs.existsSync(path.join(fullSub, 'server')) ||
-            fs.existsSync(path.join(fullSub, 'server.jar')) ||
-            fs.existsSync(path.join(fullSub, 'mods')) ||
-            fs.existsSync(path.join(fullSub, 'server.properties'));
-        } catch {}
+        const isMinecraftCandidate = checkIsMinecraftDir(fullSub);
 
         directories.push({
           name: entry.name,
@@ -174,12 +259,7 @@ router.post('/browse-dirs', (req: Request, res: Response) => {
       }
     }
 
-    const hasMinecraftFiles =
-      fs.existsSync(path.join(targetPath, 'server')) ||
-      fs.existsSync(path.join(targetPath, 'server.jar')) ||
-      fs.existsSync(path.join(targetPath, 'mods')) ||
-      fs.existsSync(path.join(targetPath, 'server.properties'));
-
+    const hasMinecraftFiles = checkIsMinecraftDir(targetPath);
     const parentPath = targetPath === '/' ? null : path.dirname(targetPath);
 
     res.json({
@@ -189,12 +269,9 @@ router.post('/browse-dirs', (req: Request, res: Response) => {
       parentPath,
       directories: directories.sort((a, b) => a.name.localeCompare(b.name)),
       hasMinecraftFiles,
-      shortcuts: [
-        { label: '/data (Docker)', path: '/data', exists: fs.existsSync('/data') },
-        { label: '/home', path: '/home', exists: fs.existsSync('/home') },
-        { label: '/app', path: '/app', exists: fs.existsSync('/app') },
-        { label: '/ (Raíz)', path: '/', exists: true },
-      ],
+      shortcuts,
+      isDocker,
+      isHomeMounted,
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Error al listar directorio' });

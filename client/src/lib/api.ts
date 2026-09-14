@@ -283,6 +283,8 @@ export const api = {
     directories: { name: string; path: string; isMinecraftCandidate: boolean }[];
     hasMinecraftFiles: boolean;
     shortcuts: { label: string; path: string; exists: boolean }[];
+    isDocker?: boolean;
+    isHomeMounted?: boolean;
     error?: string;
   }> => {
     return request('/api/settings/browse-dirs', {

@@ -114,23 +114,24 @@ El panel estará disponible de inmediato en `http://localhost:3000`.
 
 ### 📂 Mapeo de Volúmenes (Host vs Contenedor)
 
-Debido al aislamiento de contenedores Docker, las rutas del host (por ejemplo, `/home/vm/mcserver`) **no son visibles** dentro del contenedor a menos que se monten como volumen:
+Debido al aislamiento por seguridad de contenedores Docker, las carpetas del host (por ejemplo, `/home/ubuntu` o `/home/vm`) **no son visibles** dentro del contenedor a menos que se mapeen como volumen:
 
-- **Opción recomendada (Montar a `/data`):**
+- **Para explorar y gestionar servidores en carpetas de usuario (`/home`):**
   ```yaml
   volumes:
-    - /home/vm/mcserver:/data
+    - ./data:/data
+    - /home:/home
   ```
-  En la interfaz del panel (**Ajustes del Panel**), establece la ruta raíz en `/data`.
+  Al montar `/home:/home`, el botón **"Explorar"** en **Ajustes del Panel** podrá navegar por `/home/ubuntu`, `/home/usuario/...` y detectar automáticamente tus servidores Minecraft existentes.
 
-- **Opción alternativa (Ruta idéntica):**
+- **Para montar una carpeta específica directamente en `/data`:**
   ```yaml
   volumes:
-    - /home/vm/mcserver:/home/vm/mcserver
+    - /home/ubuntu/miservidor:/data
   ```
-  En la interfaz del panel (**Ajustes del Panel**), podrás utilizar directamente `/home/vm/mcserver`.
+  En la interfaz del panel (**Ajustes del Panel**), podrás establecer la ruta raíz en `/data`.
 
-> 💡 Puedes utilizar el botón **"Explorar Servidor"** en Ajustes para navegar visualmente por las carpetas del contenedor y confirmar dónde está montado tu servidor de Minecraft.
+> 💡 Puedes utilizar el botón **"Explorar"** en Ajustes para navegar visualmente por las carpetas y confirmar la ubicación exacta de tu servidor. Si una carpeta contiene archivos de Minecraft (`server.properties`, `server.jar`, `run.sh`, `mods/`), el explorador la marcará con una insignia especial ✨ **Minecraft**.
 
 ### Variables de Entorno
 

@@ -45,6 +45,8 @@ export const FolderExplorerModal: React.FC<FolderExplorerModalProps> = ({
   const [directories, setDirectories] = useState<DirectoryItem[]>([]);
   const [shortcuts, setShortcuts] = useState<ShortcutItem[]>([]);
   const [hasMinecraftFiles, setHasMinecraftFiles] = useState(false);
+  const [isDocker, setIsDocker] = useState(false);
+  const [isHomeMounted, setIsHomeMounted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isEditingPath, setIsEditingPath] = useState(false);
@@ -67,6 +69,8 @@ export const FolderExplorerModal: React.FC<FolderExplorerModalProps> = ({
       setParentPath(res.parentPath);
       setDirectories(res.directories || []);
       setHasMinecraftFiles(!!res.hasMinecraftFiles);
+      if (res.isDocker !== undefined) setIsDocker(res.isDocker);
+      if (res.isHomeMounted !== undefined) setIsHomeMounted(res.isHomeMounted);
       if (res.shortcuts) {
         setShortcuts(res.shortcuts);
       }
@@ -130,6 +134,23 @@ export const FolderExplorerModal: React.FC<FolderExplorerModalProps> = ({
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 flex items-center gap-1">
                   <Sparkles className="w-2.5 h-2.5 text-emerald-400" />
                   <span>Minecraft Detectado</span>
+                </span>
+              )}
+              {isDocker && (
+                <span
+                  className={`hidden sm:inline-flex px-2 py-0.5 rounded-full text-[10px] font-mono border items-center gap-1 ${
+                    isHomeMounted
+                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                      : 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                  }`}
+                  title={
+                    isHomeMounted
+                      ? 'El directorio /home del host está montado correctamente en el contenedor'
+                      : 'El contenedor Docker está aislado. Mapea - /home:/home para acceder a tu usuario del host'
+                  }
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full ${isHomeMounted ? 'bg-emerald-400' : 'bg-amber-400 animate-pulse'}`} />
+                  <span>{isHomeMounted ? 'Host /home conectado' : 'Host /home no montado'}</span>
                 </span>
               )}
             </div>
@@ -273,9 +294,37 @@ export const FolderExplorerModal: React.FC<FolderExplorerModalProps> = ({
                 <span>Cargando carpetas...</span>
               </div>
             ) : directories.length === 0 ? (
-              <div className="h-32 flex flex-col items-center justify-center gap-1 text-slate-500 text-xs">
-                <Folder className="w-6 h-6 text-slate-600 mb-1" />
-                <span>Sin subcarpetas en este directorio</span>
+              <div className="py-6 px-4 flex flex-col items-center justify-center text-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-slate-800/80 border border-slate-700/60 flex items-center justify-center text-slate-500">
+                  <Folder className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-slate-300">Sin subcarpetas en este directorio</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5 font-mono">{currentPath}</p>
+                </div>
+
+                {/* Host mount guidance for Docker environments */}
+                {(currentPath === '/home' || currentPath.startsWith('/home/')) && (
+                  <div className="mt-2 w-full max-w-md p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-left space-y-2.5 animate-fadeIn">
+                    <div className="flex items-center gap-2 text-amber-300 font-medium text-xs">
+                      <AlertCircle className="w-4 h-4 shrink-0 text-amber-400" />
+                      <span>¿Esperabas ver tus carpetas de la PC / Host aquí?</span>
+                    </div>
+                    <p className="text-[11px] text-slate-300 leading-relaxed">
+                      Al ejecutarse en Docker, el contenedor tiene un sistema de archivos aislado y no puede ver las carpetas de tu usuario (como <code className="text-amber-200 font-mono bg-amber-500/20 px-1 py-0.5 rounded">/home/ubuntu</code>) a menos que se mapeen como volumen.
+                    </p>
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Solución en docker-compose.yml o Dokploy:</span>
+                      <pre className="p-2 rounded-lg bg-black/60 border border-slate-800 font-mono text-[11px] text-emerald-400 select-all overflow-x-auto">
+{`volumes:
+  - /home:/home`}
+                      </pre>
+                    </div>
+                    <p className="text-[10px] text-slate-400">
+                      💡 Tras añadir este volumen y reiniciar el contenedor, todas tus carpetas y archivos aparecerán aquí instantáneamente.
+                    </p>
+                  </div>
+                )}
               </div>
             ) : (
               directories.map((dir) => (

@@ -21,6 +21,8 @@ services:
     volumes:
       # Persistent storage for Minecraft files, mods, and panel settings
       - ./data:/data
+      # Mount host /home directory to allow exploring and managing PC/host user servers (e.g. /home/ubuntu)
+      - /home:/home
     logging:
       driver: "json-file"
       options:
