@@ -1,100 +1,125 @@
 # MCServer Manager 🎮🚀
 
-Plataforma web de administración integral para servidores de Minecraft (NeoForge, Forge y Vanilla) y túneles Playit.gg, con arquitectura de grado de producción, cero mocks, componentes micro-animados de **RareUI**, y empaquetado en un único contenedor Docker compatible con **Dokploy** y **Cloudflare Tunnel**.
+Plataforma web de administración integral para servidores de Minecraft (NeoForge, Forge, Fabric y Vanilla) y túneles Playit.gg, con arquitectura de grado de producción, cero mocks, diagnóstico de crashes asistido por Inteligencia Artificial (Google Gemini), componentes micro-animados de **RareUI**, y empaquetado en un único contenedor Docker compatible con **Dokploy** y **Cloudflare Tunnel**.
 
 ---
 
 ## ✨ Características Principales
 
-- **Gestor de Versiones Oficiales:** Consulta en vivo e instalación autónoma de versiones de Minecraft y NeoForge desde los repositorios oficiales de Mojang y NeoForge Maven.
-- **Sin Mocks (100% Real):** Integración real con el sistema de archivos Linux, proceso Java en tiempo real, consultas RCON, y telemetría de hardware (`pidusage` y `systeminformation`).
-- **Diseño Impecable con RareUI:**
-  - Botones retro `RetroPixelButton` con animaciones de bloques y acentos de Minecraft.
-  - Pestañas con transiciones líquidas `layoutId` (`AnimatedTab`).
-  - Botones vidriados con barrido de luz `GlassShimmerButton`.
-  - Suite completa de iconos SVG animados `RareIcons` (servidores con LEDs, radar de Playit, engranajes sincronizados, consola interactiva, etc.).
-- **Consola Interactiva en Tiempo Real:** Emulador de terminal `xterm.js` con streaming bidireccional vía WebSocket (`/ws/console`), soporte de colores ANSI y ejecución de comandos RCON/stdin.
-- **Gestor Visual de `server.properties`:** Formulario intuitivo por categorías lógicas (modo de juego, dificultad, MOTD con colores, puertos, whitelist, etc.) y editor avanzado en texto plano con guardado atómico y copias de seguridad `.bak`.
-- **Administrador de Mods:** Carga Drag-and-Drop de archivos `.jar`, activación/desactivación instantánea mediante renombrado (`.jar` <-> `.jar.disabled`), renombrado y eliminación.
-- **Control de Jugadores y Permisos:** Administración de Operadores (`ops.json`), Lista Blanca (`whitelist.json`), Baneos (`banned-players.json`) y acciones rápidas con avatares en 3D (Steve/Alex/Skin).
-- **Módulo Playit.gg:** Detección automática del binario, inicio/parada del túnel y captura de la dirección pública asignada (`*.playit.gg`).
-- **Despliegue Multi-Stage:** Un único `Dockerfile` que contiene **OpenJDK 21**, **Node.js 22 LTS**, el binario de **Playit.gg**, el backend compilado y el frontend estático servido en el puerto `3000`.
+### 🧠 Diagnóstico Inteligente de Errores y Crasheos con IA (Google Gemini)
+- **Análisis Universal de Causas:** No se limita a dependencias de mods; analiza con objetividad médica fallos de memoria RAM (`OutOfMemoryError`), puertos ocupados (`BindException`), incompatibilidades de versión de Java, EULA no aceptada (`eula=false`), mods de cliente instalados por error en servidor dedicado, corrupción de chunks/mundos (`RegionFile`, NBT) y errores de sintaxis en archivos `.properties`, `.toml` o `.json`.
+- **Inyección de Contexto Real:** Lee directamente los reportes oficiales de crash de Minecraft (`crash-reports/crash-*.txt`), la lista de archivos `.jar` instalados, la versión de Minecraft, el loader y los registros recientes de consola.
+- **Desglose Estructurado en el Dashboard:**
+  - 🏷️ **Librerías / Dependencias requeridas:** Etiquetas distintivas en cian con sus versiones mínimas requeridas (`Create 0.6.10+`, `Sable 2.0.0+`, etc.).
+  - 📦 **Mod(s) instalados o Componente afectado:** Identificación clara entre archivos instalados en conflicto o componentes del sistema (Memoria, Red, Java, Mundo).
+  - 📋 **Desglose técnico por mod:** Viñetas detalladas que explican qué archivo específico solicita cuál librería.
+  - 💡 **Solución paso a paso en español:** Instrucciones accionables con botones de navegación contextual (Gestionar Mods, Ver Consola, Actualizar Loader).
+- **Banner Animado con Cronómetro:** Indicador futurista en tiempo real con cronómetro en vivo (`⏱️ 00:04s`), haz de escaneo y halo giratorio mientras se consulta el modelo.
+- **Resiliencia y Alta Disponibilidad:**
+  - Latencia ultrarrápida configurada con `thinkingBudget: 0` (~1.5s de respuesta).
+  - Fallback automático en cascada entre modelos (`gemini-3-flash-preview`, `gemini-3.6-flash`, `gemini-3.8-flash`) ante errores 503 por sobrecarga temporal de servidores de Google o límites de cuota (429).
+  - Analizador sintáctico local de respaldo para garantizar diagnósticos detallados incluso sin conexión a internet.
+  - Configurable desde **Ajustes del Panel** (activar/desactivar IA, ingresar API Key y selector de modelos).
 
 ---
 
-## 🏗️ Arquitectura del Monorepo
+### 📦 Gestor de Mods con Confirmación Sostenida ("Hold to Confirm")
+- **Acciones Masivas Seguras:**
+  - ⏸️ **Desactivar todos los mods:** Botón ámbar que requiere mantener presionado durante 1.5 segundos con barra de progreso fluida para evitar clics accidentales; renombra todos los `.jar` a `.jar.disabled`.
+  - 🗑️ **Eliminar todos los mods:** Botón destructivo rojo que requiere mantener presionado durante 2.0 segundos antes de eliminar los mods del servidor.
+- **Actualización Fluida sin Recargas:** Cambios de estado instantáneos en la interfaz sin parpadeos ni recargas completas de pantalla.
+- **Carga Drag-and-Drop:** Sube múltiples archivos `.jar` simultáneamente arrastrándolos directamente al navegador con barra de progreso en vivo.
+- **Gestión Individual:** Activación/desactivación unitaria, renombrado y eliminación.
+
+---
+
+### 📊 Telemetría y Rendimiento Real (Sin Mocks)
+- **Monitoreo en Tiempo Real:** Uso de CPU del sistema y del proceso Java, memoria RAM consumida (asignada vs disponible) y espacio en disco.
+- **TPS y MSPT Reales:** Lectura en vivo de TPS (Ticks Per Second) y tiempo promedio por tick mediante comandos de telemetría e integración de procesos.
+
+---
+
+### 💻 Consola Interactiva y Red
+- **Terminal xterm.js:** Emulador completo con streaming bidireccional vía WebSocket (`/ws/console`), soporte de colores ANSI y ejecución de comandos RCON y entrada estándar (stdin).
+- **Túnel Playit.gg Integrado:** Detección y gestión del binario de Playit.gg, control de inicio/parada y captura automática de la dirección pública asignada (`*.playit.gg`).
+- **Editor Visual de `server.properties`:** Formulario interactivo por categorías lógicas y editor en texto plano con guardado atómico y copias de seguridad automáticas `.bak`.
+- **Control de Jugadores:** Gestión completa de OPs (`ops.json`), Lista Blanca (`whitelist.json`), Baneos (`banned-players.json`) y avatares de skins de Mojang.
+
+---
+
+## 🏗️ Arquitectura del Proyecto
 
 ```text
 mcserver-manager/
-├── client/                     # Frontend SPA (React + Vite + TypeScript + Tailwind CSS + RareUI)
+├── client/                         # Frontend SPA (React 18 + Vite + TypeScript + Tailwind CSS)
 │   ├── src/
 │   │   ├── components/
-│   │   │   ├── layout/         # Sidebar, Topbar, MobileNav, MainLayout
-│   │   │   ├── rareui/         # RetroPixelButton, AnimatedTab, GlassShimmerButton, RareIcons
-│   │   │   └── ui/             # Badges, Tabs, Modals
+│   │   │   ├── layout/             # Sidebar, Topbar, MobileNav, MainLayout
+│   │   │   ├── rareui/             # HoldButton, GlassShimmerButton, AnimatedTab, RareIcons
+│   │   │   └── common/             # Modales y componentes reutilizables
 │   │   ├── features/
-│   │   │   ├── auth/           # LoginView, AuthContext
-│   │   │   ├── dashboard/      # Métricas de CPU/RAM/Disco/TPS, acciones rápidas
-│   │   │   ├── console/        # Terminal xterm.js & hook useConsoleWs
-│   │   │   ├── versions/       # Selector Minecraft / NeoForge, RAM & EULA
-│   │   │   ├── properties/     # Editor reactivo de server.properties
-│   │   │   ├── players/        # OPs, Whitelist, Bans, Acciones rápidas
-│   │   │   ├── mods/           # Drag-and-drop jar upload, toggle, rename
-│   │   │   ├── playit/         # Control y logs del túnel Playit
-│   │   │   └── settings/       # Ruta raíz y validación de directorios
-│   │   ├── lib/api.ts          # Cliente API tipado con autenticación HttpOnly
+│   │   │   ├── dashboard/          # Métricas, estado, diagnóstico con IA y acciones
+│   │   │   ├── console/            # Terminal xterm.js & hook useConsoleWs
+│   │   │   ├── mods/               # Gestor de mods con subida, toggle y hold buttons
+│   │   │   ├── versions/           # Selector e instalador de Minecraft / NeoForge
+│   │   │   ├── properties/         # Editor reactivo de server.properties
+│   │   │   ├── players/            # OPs, Whitelist y Bans
+│   │   │   ├── playit/             # Control y logs del túnel Playit.gg
+│   │   │   └── settings/           # Configuración de IA (Gemini), modelos y rutas
+│   │   ├── lib/
+│   │   │   ├── api.ts              # Cliente HTTP tipado con credenciales seguras
+│   │   │   └── types.ts            # Definiciones de tipos compartidos
 │   │   └── App.tsx
-├── server/                     # Backend API & WebSocket (Node.js + Express + TypeScript)
+├── server/                         # Backend API & WebSocket (Node.js + Express + TypeScript)
 │   ├── src/
-│   │   ├── config/             # Constantes y rutas
-│   │   ├── middlewares/        # auth.middleware.ts (JWT seguro)
-│   │   ├── routes/             # Endpoints REST (/auth, /settings, /status, /versions, /properties, /players, /mods, /playit)
+│   │   ├── config/                 # Constantes y rutas del servidor
+│   │   ├── middlewares/            # Autenticación JWT y validaciones
+│   │   ├── routes/                 # Endpoints REST (/auth, /status, /mods, /settings, etc.)
 │   │   ├── services/
-│   │   │   ├── config.service.ts     # Manejo de panel-config.json y rutas dinámicas
-│   │   │   ├── properties.service.ts # Parser y guardado atómico con .bak
-│   │   │   ├── players.service.ts    # CRUD ops.json, whitelist.json, Mojang UUID API
-│   │   │   ├── mods.service.ts       # Subida, toggle (.disabled), renombrado y borrado
-│   │   │   ├── versions.service.ts   # Descargador e instalador autónomo NeoForge/Mojang
-│   │   │   ├── rcon.service.ts       # Conexión persistente RCON y comandos
-│   │   │   ├── process.service.ts    # Control de procesos, parada limpia (/stop -> SIGTERM -> SIGKILL)
-│   │   │   ├── monitor.service.ts    # Telemetría CPU/RAM/Disco/TPS en tiempo real
-│   │   │   └── playit.service.ts     # Control del proceso y logs de Playit.gg
+│   │   │   ├── ai.service.ts       # Integración con Google Gemini (@google/genai)
+│   │   │   ├── process.service.ts  # Control de proceso Minecraft, captura de logs y crashes
+│   │   │   ├── mods.service.ts     # CRUD y operaciones masivas de mods (disable-all, delete-all)
+│   │   │   ├── config.service.ts   # Persistencia en panel-config.json
+│   │   │   ├── rcon.service.ts     # Protocolo RCON cliente
+│   │   │   ├── monitor.service.ts  # Métricas de hardware y TPS
+│   │   │   ├── versions.service.ts # Descargas oficiales de Mojang y NeoForge Maven
+│   │   │   └── playit.service.ts   # Control del túnel Playit.gg
 │   │   ├── ws/
-│   │   │   └── console.ws.ts         # WebSocket /ws/console con tail de latest.log
-│   │   └── index.ts                  # Punto de entrada y servidor de SPA estático
-├── Dockerfile                  # Multi-stage build (Node 22 + Java 21 + Playit)
-├── docker-compose.yml          # Despliegue listo para Dokploy
-└── package.json                # Scripts para monorepo
+│   │   │   └── console.ws.ts       # Servidor WebSocket para streaming de consola
+│   │   └── index.ts                # Inicialización y servidor de archivos estáticos
+├── Dockerfile                      # Multi-stage build (Node 22 + Java 21 + Playit)
+├── docker-compose.yml              # Despliegue listo para Dokploy / Servidor dedicado
+└── package.json                    # Scripts del monorepo
 ```
 
 ---
 
 ## 🚀 Despliegue en Producción (Dokploy / Docker)
 
-### Opción 1: Docker Compose
+### Ejecución con Docker Compose
 
 ```bash
 docker compose up -d --build
 ```
 
-El panel estará disponible en `http://localhost:3000`.
+El panel estará disponible de inmediato en `http://localhost:3000`.
 
 ### Variables de Entorno
 
 | Variable | Descripción | Valor por Defecto |
 | :--- | :--- | :--- |
-| `PORT` | Puerto HTTP del panel y WebSocket | `3000` |
-| `SERVER_ROOT` | Directorio raíz persistente para los archivos de Minecraft | `/data` |
-| `MASTER_PASSWORD` | Contraseña inicial de administrador | Si está vacía, se solicita al primer inicio |
-| `JWT_SECRET` | Clave secreta para firmar tokens de sesión | Autogenerada si no se define |
+| `PORT` | Puerto HTTP del panel y del WebSocket | `3000` |
+| `SERVER_ROOT` | Directorio raíz persistente para los archivos del servidor Minecraft | `/data` |
+| `MASTER_PASSWORD` | Contraseña inicial de administrador | Si está vacía, se solicita en el primer acceso |
+| `JWT_SECRET` | Clave secreta para firmar tokens de sesión | Autogenerada criptográficamente |
 
 ---
 
 ## 🌐 Configuración con Cloudflare Tunnel
 
-Para publicar el panel a través de Cloudflare Tunnel:
-1. Crea un túnel HTTP hacia `http://localhost:3000` (o el nombre del contenedor Docker).
-2. En la configuración del dominio en el panel de Cloudflare, asegúrate de tener activada la opción **WebSockets** (Cloudflare Dashboard -> Network -> WebSockets habilitado).
+Para publicar el panel hacia internet con Cloudflare Tunnel:
+1. Apunta el servicio del túnel hacia `http://localhost:3000` (o el nombre del contenedor en la red Docker).
+2. En el panel de Cloudflare, accede a: **Domain -> Network -> WebSockets** y asegúrate de que esté **Activado** para el correcto funcionamiento de la consola en vivo y la telemetría.
 
 ---
 
@@ -108,18 +133,17 @@ cd client && npm install
 cd ../server && npm install
 ```
 
-### 2. Ejecutar ambos servicios en modo desarrollo
+### 2. Iniciar en modo desarrollo
 
 ```bash
-# Desde la raíz:
 npm run dev
 ```
 
-Esto levantará concurrentemente:
-- Frontend Vite con Hot Reload en `http://localhost:5173`
-- Backend Express con TypeScript en `http://localhost:3000`
+Levantará concurrentemente:
+- **Frontend Vite:** `http://localhost:5173` (con Hot Module Replacement).
+- **Backend Express & WS:** `http://localhost:3000`.
 
-### 3. Compilar para producción
+### 3. Compilar bundle de producción
 
 ```bash
 npm run build
@@ -129,7 +153,7 @@ npm run build
 
 ## 🛡️ Seguridad
 
-- Las contraseñas se almacenan mediante hashes criptográficos **bcrypt**.
-- La sesión se mantiene mediante cookies seguras `HttpOnly` (`mc_token`).
-- Los endpoints de subida y renombrado de mods cuentan con validación estricta para evitar vulnerabilidades de *Path Traversal*.
-- Las escrituras a archivos de configuración (`server.properties`, `ops.json`, etc.) se realizan de manera atómica (escritura en `.tmp` y reemplazo atómico) con copias de respaldo `.bak`.
+- **Hashes Criptográficos:** Contraseñas protegidas mediante `bcryptjs` con salting seguro.
+- **Protección de Sesión:** Autenticación basada en cookies `HttpOnly` (`mc_token`) con SameSite estricto.
+- **Sanitización de Rutas:** Validación contra ataques de *Path Traversal* en subidas, descargas y renombrado de mods o archivos.
+- **Escrituras Atómicas:** Modificaciones a archivos de configuración (`server.properties`, `ops.json`, etc.) realizadas mediante escritura previa en archivos temporales y sustitución atómica para prevenir corrupción de datos en caso de apagones o detenciones abruptas.
