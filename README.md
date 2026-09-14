@@ -39,6 +39,14 @@ Plataforma web de administración integral para servidores de Minecraft (NeoForg
 
 ---
 
+### 📁 Explorador de Directorios del Servidor y Detección de Minecraft
+- **Navegación Visual del Sistema de Archivos:** Permite explorar de forma segura e interactiva las rutas internas del servidor y del contenedor Docker desde **Ajustes del Panel**.
+- **Detección Automática de Servidores Minecraft:** Analiza e identifica al instante carpetas que contengan `server/`, `server.jar`, `mods/` o `server.properties` resaltándolas con la insignia ✨ **Minecraft**.
+- **Accesos Rápidos a Volúmenes Docker:** Atajos directos a rutas estándar como `/data`, `/home`, `/app` y `/` con verificación de existencia en tiempo real.
+- **Validación y Guardado In-Situ:** Diagnóstico de subdirectorios clave (`server/`, `mods/`, `logs/`, etc.) y guardado dinámico de la ruta raíz sin reiniciar el contenedor.
+
+---
+
 ### 💻 Consola Interactiva y Red
 - **Terminal xterm.js:** Emulador completo con streaming bidireccional vía WebSocket (`/ws/console`), soporte de colores ANSI y ejecución de comandos RCON y entrada estándar (stdin).
 - **Túnel Playit.gg Integrado:** Detección y gestión del binario de Playit.gg, control de inicio/parada y captura automática de la dirección pública asignada (`*.playit.gg`).
@@ -103,6 +111,26 @@ docker compose up -d --build
 ```
 
 El panel estará disponible de inmediato en `http://localhost:3000`.
+
+### 📂 Mapeo de Volúmenes (Host vs Contenedor)
+
+Debido al aislamiento de contenedores Docker, las rutas del host (por ejemplo, `/home/vm/mcserver`) **no son visibles** dentro del contenedor a menos que se monten como volumen:
+
+- **Opción recomendada (Montar a `/data`):**
+  ```yaml
+  volumes:
+    - /home/vm/mcserver:/data
+  ```
+  En la interfaz del panel (**Ajustes del Panel**), establece la ruta raíz en `/data`.
+
+- **Opción alternativa (Ruta idéntica):**
+  ```yaml
+  volumes:
+    - /home/vm/mcserver:/home/vm/mcserver
+  ```
+  En la interfaz del panel (**Ajustes del Panel**), podrás utilizar directamente `/home/vm/mcserver`.
+
+> 💡 Puedes utilizar el botón **"Explorar Servidor"** en Ajustes para navegar visualmente por las carpetas del contenedor y confirmar dónde está montado tu servidor de Minecraft.
 
 ### Variables de Entorno
 

@@ -1,4 +1,6 @@
 import { Router, Request, Response } from 'express';
+import fs from 'fs';
+import path from 'path';
 import { ConfigService } from '../services/config.service';
 
 const router = Router();
@@ -103,6 +105,99 @@ router.post('/validate-path', (req: Request, res: Response) => {
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Path validation failed' });
+  }
+});
+
+// POST /api/settings/browse-dirs
+router.post('/browse-dirs', (req: Request, res: Response) => {
+  let requestedPath = req.body.path;
+  if (!requestedPath || typeof requestedPath !== 'string') {
+    const configuredRoot = configService.getRootPath();
+    if (fs.existsSync(configuredRoot)) {
+      requestedPath = configuredRoot;
+    } else if (fs.existsSync('/data')) {
+      requestedPath = '/data';
+    } else {
+      requestedPath = '/';
+    }
+  }
+
+  const targetPath = path.resolve(requestedPath);
+
+  if (!fs.existsSync(targetPath)) {
+    const parent = targetPath === '/' ? null : path.dirname(targetPath);
+    res.json({
+      success: false,
+      exists: false,
+      currentPath: targetPath,
+      parentPath: parent,
+      directories: [],
+      hasMinecraftFiles: false,
+      error: `La ruta "${targetPath}" no existe dentro del contenedor.`,
+      shortcuts: [
+        { label: '/data (Docker)', path: '/data', exists: fs.existsSync('/data') },
+        { label: '/home', path: '/home', exists: fs.existsSync('/home') },
+        { label: '/app', path: '/app', exists: fs.existsSync('/app') },
+        { label: '/ (Raíz)', path: '/', exists: true },
+      ],
+    });
+    return;
+  }
+
+  try {
+    const stats = fs.statSync(targetPath);
+    if (!stats.isDirectory()) {
+      res.status(400).json({ error: 'La ruta especificada no es una carpeta o directorio' });
+      return;
+    }
+
+    const entries = fs.readdirSync(targetPath, { withFileTypes: true });
+    const directories = [];
+
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        const fullSub = path.join(targetPath, entry.name);
+        let isMinecraftCandidate = false;
+        try {
+          isMinecraftCandidate =
+            fs.existsSync(path.join(fullSub, 'server')) ||
+            fs.existsSync(path.join(fullSub, 'server.jar')) ||
+            fs.existsSync(path.join(fullSub, 'mods')) ||
+            fs.existsSync(path.join(fullSub, 'server.properties'));
+        } catch {}
+
+        directories.push({
+          name: entry.name,
+          path: fullSub,
+          isMinecraftCandidate,
+        });
+      }
+    }
+
+    const hasMinecraftFiles =
+      fs.existsSync(path.join(targetPath, 'server')) ||
+      fs.existsSync(path.join(targetPath, 'server.jar')) ||
+      fs.existsSync(path.join(targetPath, 'mods')) ||
+      fs.existsSync(path.join(targetPath, 'server.properties'));
+
+    const parentPath = targetPath === '/' ? null : path.dirname(targetPath);
+
+    res.json({
+      success: true,
+      exists: true,
+      currentPath: targetPath,
+      parentPath,
+      directories: directories.sort((a, b) => a.name.localeCompare(b.name)),
+      hasMinecraftFiles,
+      shortcuts: [
+        { label: '/data (Docker)', path: '/data', exists: fs.existsSync('/data') },
+        { label: '/home', path: '/home', exists: fs.existsSync('/home') },
+        { label: '/app', path: '/app', exists: fs.existsSync('/app') },
+        { label: '/ (Raíz)', path: '/', exists: true },
+      ],
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Error al listar directorio' });
   }
 });
 

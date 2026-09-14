@@ -275,6 +275,21 @@ export const api = {
       body: JSON.stringify({ path }),
     });
   },
+  browseDirectories: async (path?: string): Promise<{
+    success: boolean;
+    exists: boolean;
+    currentPath: string;
+    parentPath: string | null;
+    directories: { name: string; path: string; isMinecraftCandidate: boolean }[];
+    hasMinecraftFiles: boolean;
+    shortcuts: { label: string; path: string; exists: boolean }[];
+    error?: string;
+  }> => {
+    return request('/api/settings/browse-dirs', {
+      method: 'POST',
+      body: JSON.stringify({ path }),
+    });
+  },
 
   // Local NeoForge Discovery, Upload & Activation
   getLocalNeoForgeVersions: async (): Promise<{
