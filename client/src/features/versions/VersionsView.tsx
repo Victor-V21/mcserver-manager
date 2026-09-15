@@ -430,7 +430,7 @@ export const VersionsView: React.FC = () => {
                 <div className="flex items-center gap-1.5">
                   <span className="text-slate-500">Directorio:</span>
                   <code className="text-emerald-300 bg-dark-950 px-2 py-0.5 rounded border border-slate-800">
-                    {localNeoForge.serverDir || installedInfo?.serverDir || '/home/vm/mcserver/server'}
+                    {localNeoForge.serverDir || installedInfo?.serverDir || '/home/vm/minecraft/server'}
                   </code>
                 </div>
 

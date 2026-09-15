@@ -59,6 +59,7 @@ export interface ServerStatusResponse {
     list: PlayerInfo[];
   };
   installedVersion?: any;
+  controlError?: string | null;
   crashDiagnostic?: CrashDiagnostic | null;
 }
 
@@ -120,4 +121,3 @@ export interface InstalledVersionInfo {
   serverDir?: string;
   formattedVersion?: string;
 }
-

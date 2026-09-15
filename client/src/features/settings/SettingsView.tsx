@@ -18,7 +18,7 @@ import {
 
 export const SettingsView: React.FC = () => {
   const [settings, setSettings] = useState<PanelSettings | null>(null);
-  const [rootPath, setRootPath] = useState('/home/vm/mcserver');
+  const [rootPath, setRootPath] = useState('/home/vm');
   const [showFolderExplorer, setShowFolderExplorer] = useState(false);
   const [validation, setValidation] = useState<PathValidationStatus>({
     server: true,
@@ -51,7 +51,7 @@ export const SettingsView: React.FC = () => {
     try {
       const data = await api.getSettings();
       setSettings(data);
-      setRootPath(data.serverRootPath || '/home/vm/mcserver');
+      setRootPath(data.serverRootPath || '/home/vm');
       setAiDiagnosticEnabled(!!data.aiDiagnosticEnabled);
       setAiApiKey(data.aiApiKey || '');
       setAiModel(data.aiModel || 'gemini-3-flash-preview');
@@ -179,7 +179,7 @@ export const SettingsView: React.FC = () => {
                 type="text"
                 value={rootPath}
                 onChange={(e) => setRootPath(e.target.value)}
-                placeholder="/data o /home/vm/mcserver"
+                placeholder="/home/vm/ruta-del-servidor o /data"
                 className="w-full px-3.5 py-2.5 bg-dark-950 border border-slate-700 rounded-xl text-xs text-white font-mono focus:outline-none focus:border-emerald-500 pr-9"
               />
               <button

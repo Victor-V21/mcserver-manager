@@ -52,7 +52,7 @@ router.post('/server/action', async (req: Request, res: Response) => {
         break;
       }
       case 'kill': {
-        const result = processService.kill();
+        const result = await processService.kill();
         res.json(result);
         break;
       }

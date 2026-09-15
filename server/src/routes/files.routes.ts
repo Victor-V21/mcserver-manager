@@ -3,24 +3,28 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { FilesService } from '../services/files.service';
-import { ConfigService } from '../services/config.service';
 
 const router = Router();
 const filesService = FilesService.getInstance();
-const configService = ConfigService.getInstance();
 
 // Configure multer for file uploads in explorer
 const storage = multer.diskStorage({
-  destination: (req, _file, cb) => {
-    const targetRel = (req.query.path as string) || (req.body.targetPath as string) || '';
-    const root = configService.getRootPath();
-    const cleanRel = path.normalize(targetRel).replace(/^(\.\.[\/\\])+/, '');
-    const dest = path.resolve(root, cleanRel);
-    if (!fs.existsSync(dest)) {
-      fs.mkdirSync(dest, { recursive: true });
-    }
-    cb(null, dest);
-  },
+    destination: (req, _file, cb) => {
+      const targetRel = (req.query.path as string) || (req.body.targetPath as string) || '';
+      try {
+        const dest = filesService.resolvePath(targetRel);
+        if (!fs.existsSync(dest)) {
+          fs.mkdirSync(dest, { recursive: true });
+        }
+        if (!fs.statSync(dest).isDirectory()) {
+          cb(new Error('Upload destination is not a directory'), '');
+          return;
+        }
+        cb(null, dest);
+      } catch (error: any) {
+        cb(error, '');
+      }
+    },
   filename: (_req, file, cb) => {
     const safeName = path.basename(file.originalname).replace(/[^a-zA-Z0-9._-]/g, '_');
     cb(null, safeName);

@@ -35,9 +35,9 @@ export class RconService {
         return false;
       }
 
-      const port = parseInt(properties['rcon.port'] || '25575', 10);
-      const password = properties['rcon.password'] || 'mcmanager_secure_rcon';
-      const host = '127.0.0.1';
+      const port = parseInt(process.env.RCON_PORT || properties['rcon.port'] || '25575', 10);
+      const password = process.env.RCON_PASSWORD || properties['rcon.password'] || 'mcmanager_secure_rcon';
+      const host = process.env.RCON_HOST || '127.0.0.1';
 
       this.client = new Rcon({ host, port, password, timeout: 3000 });
 

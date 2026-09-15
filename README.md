@@ -42,7 +42,7 @@ Plataforma web de administración integral para servidores de Minecraft (NeoForg
 ### 📁 Explorador de Directorios del Servidor y Detección de Minecraft
 - **Navegación Visual del Sistema de Archivos:** Permite explorar de forma segura e interactiva las rutas internas del servidor y del contenedor Docker desde **Ajustes del Panel**.
 - **Detección Automática de Servidores Minecraft:** Analiza e identifica al instante carpetas que contengan `server/`, `server.jar`, `mods/` o `server.properties` resaltándolas con la insignia ✨ **Minecraft**.
-- **Accesos Rápidos a Volúmenes Docker:** Atajos directos a rutas estándar como `/data`, `/home`, `/app` y `/` con verificación de existencia en tiempo real.
+- **Accesos Rápidos a Volúmenes Docker:** Atajos directos al home del host y `/data` con verificación de existencia en tiempo real.
 - **Validación y Guardado In-Situ:** Diagnóstico de subdirectorios clave (`server/`, `mods/`, `logs/`, etc.) y guardado dinámico de la ruta raíz sin reiniciar el contenedor.
 
 ---
@@ -107,38 +107,89 @@ mcserver-manager/
 ### Ejecución con Docker Compose
 
 ```bash
+cp .env.example .env
+# Edita .env con la ruta real, UID/GID, credenciales y nombre de la unidad.
+sudo install -d -m 0750 -o 1000 -g 1000 /srv/mcserver-manager/data
+# Activa primero el bridge del host (se explica abajo) y después despliega:
 docker compose up -d --build
 ```
 
 El panel estará disponible de inmediato en `http://localhost:3000`.
 
-### 📂 Mapeo de Volúmenes (Host vs Contenedor)
+### 📂 Integración con un Minecraft gestionado por systemd
 
-Debido al aislamiento por seguridad de contenedores Docker, las carpetas del host (por ejemplo, `/home/ubuntu` o `/home/vm`) **no son visibles** dentro del contenedor a menos que se mapeen como volumen:
+El manager monta el árbol del host que se indique en `HOST_HOME_PATH` usando la misma ruta absoluta dentro del contenedor. Así el explorador puede recorrer todo `/home/vm` y el servidor Minecraft continúa fuera de Docker, ejecutado por `systemd`.
 
-- **Para explorar y gestionar servidores en carpetas de usuario (`/home`):**
-  ```yaml
-  volumes:
-    - ./data:/data
-    - /home:/home
-  ```
-  Al montar `/home:/home`, el botón **"Explorar"** en **Ajustes del Panel** podrá navegar por `/home/ubuntu`, `/home/usuario/...` y detectar automáticamente tus servidores Minecraft existentes.
+Ejemplo en `.env`:
 
-- **Para montar una carpeta específica directamente en `/data`:**
-  ```yaml
-  volumes:
-    - /home/ubuntu/miservidor:/data
-  ```
-  En la interfaz del panel (**Ajustes del Panel**), podrás establecer la ruta raíz en `/data`.
+```dotenv
+HOST_HOME_PATH=/home/vm
+MINECRAFT_HOST_PATH=/home/vm/minecraft
+MC_UID=1000
+MC_GID=1000
+MC_SERVICE_NAME=minecraft.service
+MANAGER_DATA_PATH=/srv/mcserver-manager/data
+MC_CONTROL_HOST_PATH=/run/user/1000/mcmanager
+```
 
-> 💡 Puedes utilizar el botón **"Explorar"** en Ajustes para navegar visualmente por las carpetas y confirmar la ubicación exacta de tu servidor. Si una carpeta contiene archivos de Minecraft (`server.properties`, `server.jar`, `run.sh`, `mods/`), el explorador la marcará con una insignia especial ✨ **Minecraft**.
+`MINECRAFT_HOST_PATH` debe ser la ruta que aparece en `WorkingDirectory` de `systemctl cat minecraft.service`. Como `HOST_HOME_PATH` se monta sobre sí misma, el contenedor verá esa misma ruta absoluta y también todo el resto del árbol `/home/vm`.
+
+El explorador general usa `FILE_EXPLORER_ROOT=HOST_HOME_PATH`; por tanto, puede administrar archivos en todo el home montado. Esta capacidad debe protegerse con la autenticación del panel y no debe publicarse sin HTTPS ni una contraseña fuerte.
+
+El servicio `ops/mc-manager-bridge.service` instala un puente Unix restringido en el host para las acciones `status`, `start`, `stop`, `restart` y `kill`. El puente debe ejecutarse en el host, no dentro de Docker:
+
+```bash
+sudo install -m 0755 ops/mc-manager-bridge.py /usr/local/libexec/mc-manager-bridge.py
+sudo install -m 0644 ops/mc-manager-bridge.service /etc/systemd/system/mc-manager-bridge.service
+# Si el usuario/UID no es vm/1000, ajusta MC_SOCKET_GROUP y el chown de la unidad.
+sudo systemctl daemon-reload
+sudo systemctl enable --now mc-manager-bridge.service
+```
+
+El puente nunca recibe nombres de unidades ni comandos shell desde el panel; solo usa la unidad fija configurada en su entorno.
+
+Si `minecraft.service` pertenece al usuario `vm` y se administra con `systemctl --user`, usa la unidad `ops/mc-manager-bridge-user.service` en lugar de la unidad global:
+
+```bash
+sudo install -m 0755 ops/mc-manager-bridge.py /usr/local/libexec/mc-manager-bridge.py
+mkdir -p ~/.config/systemd/user
+install -m 0644 ops/mc-manager-bridge-user.service ~/.config/systemd/user/mc-manager-bridge.service
+sudo loginctl enable-linger vm
+systemctl --user daemon-reload
+systemctl --user enable --now mc-manager-bridge.service
+```
+
+La unidad de usuario usa `/run/user/1000/mcmanager`, que debe coincidir con `MC_CONTROL_HOST_PATH` en Dokploy. Si el usuario o UID del servidor son diferentes, cambia `vm`, `1000` y la ruta del socket en la unidad y en el entorno de Dokploy.
+
+### 🧪 Prueba local con el servidor de `test/`
+
+El repositorio incluye un Compose aislado para comprobar el acceso a la carpeta y el modo externo:
+
+```bash
+mkdir -p /run/user/$(id -u)/mcmanager-test
+systemctl --user link "$(pwd)/ops/minecraft-test.service"
+systemctl --user daemon-reload
+MC_SERVICE_NAME=minecraft-test.service \
+MC_CONTROL_SOCKET=/run/user/$(id -u)/mcmanager-test/control.sock \
+MC_SYSTEMCTL_SCOPE=user \
+MC_SOCKET_GROUP="$(id -gn)" \
+python3 ops/mc-manager-bridge.py
+# En otra terminal:
+docker compose -f docker-compose.test.yml build
+docker compose -f docker-compose.test.yml up -d
+```
+
+El panel de prueba queda en `http://localhost:3001`. Al terminar, detén el contenedor y elimina el enlace del servicio temporal con `systemctl --user unlink minecraft-test.service`.
 
 ### Variables de Entorno
 
 | Variable | Descripción | Valor por Defecto |
 | :--- | :--- | :--- |
 | `PORT` | Puerto HTTP del panel y del WebSocket | `3000` |
-| `SERVER_ROOT` | Directorio raíz persistente para los archivos del servidor Minecraft | `/data` |
+| `HOST_HOME_PATH` | Árbol del host visible para el explorador general | `/home/vm` |
+| `MINECRAFT_HOST_PATH` | Ruta absoluta del servidor existente gestionado por systemd | `/home/vm/minecraft` |
+| `FILE_EXPLORER_ROOT` | Raíz que usa el explorador de archivos | Igual a `HOST_HOME_PATH` |
+| `SERVER_ROOT` | Directorio raíz del servidor Minecraft dentro del montaje | Igual a `MINECRAFT_HOST_PATH` |
 | `MASTER_PASSWORD` | Contraseña inicial de administrador | Si está vacía, se solicita en el primer acceso |
 | `JWT_SECRET` | Clave secreta para firmar tokens de sesión | Autogenerada criptográficamente |
 

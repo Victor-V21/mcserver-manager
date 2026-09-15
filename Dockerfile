@@ -61,7 +61,6 @@ ENV PORT=3000 \
 RUN mkdir -p /data
 
 EXPOSE 3000
-EXPOSE 25565
 
 VOLUME ["/data"]
 

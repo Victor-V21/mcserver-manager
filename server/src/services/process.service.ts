@@ -6,11 +6,13 @@ import { RconService } from './rcon.service';
 import { SUBDIRS } from '../config/constants';
 import modErrors from '../data/mod-errors.json';
 import { CrashDiagnostic } from '../types';
+import { HostControlService, HostControlStatus } from './host-control.service';
 
 export class ProcessService {
   private static instance: ProcessService;
   private configService: ConfigService;
   private rconService: RconService;
+  private hostControlService: HostControlService;
   private serverProcess: ChildProcess | null = null;
   private serverStatus: 'online' | 'offline' | 'starting' | 'stopping' = 'offline';
   private startTime: number | null = null;
@@ -22,6 +24,7 @@ export class ProcessService {
   private constructor() {
     this.configService = ConfigService.getInstance();
     this.rconService = RconService.getInstance();
+    this.hostControlService = new HostControlService();
   }
 
   private parseLogForErrors(str?: string) {
@@ -126,13 +129,32 @@ export class ProcessService {
     return ProcessService.instance;
   }
 
-  public getStatus(): {
+  public async getStatus(): Promise<{
     isRunning: boolean;
     pid: number | null;
     status: 'online' | 'offline' | 'starting' | 'stopping';
     uptime: number;
     crashDiagnostic?: CrashDiagnostic | null;
-  } {
+    controlError?: string;
+    cpuPercent?: number;
+    memoryBytes?: number;
+  }> {
+    if (this.hostControlService.isExternal()) {
+      try {
+        const hostStatus = await this.hostControlService.getStatus();
+        return this.mapHostStatus(hostStatus);
+      } catch (error: any) {
+        return {
+          isRunning: false,
+          pid: null,
+          status: 'offline',
+          uptime: 0,
+          crashDiagnostic: this.lastCrashDiagnostic,
+          controlError: error.message || 'Host control bridge unavailable',
+        };
+      }
+    }
+
     const isRunning = this.serverProcess !== null && !this.serverProcess.killed;
     const uptime = isRunning && this.startTime ? Math.floor((Date.now() - this.startTime) / 1000) : 0;
     return {
@@ -144,7 +166,37 @@ export class ProcessService {
     };
   }
 
+  private mapHostStatus(hostStatus: HostControlStatus): {
+    isRunning: boolean;
+    pid: number | null;
+    status: 'online' | 'offline' | 'starting' | 'stopping';
+    uptime: number;
+    crashDiagnostic?: CrashDiagnostic | null;
+    controlError?: string;
+    cpuPercent?: number;
+    memoryBytes?: number;
+  } {
+    let status: 'online' | 'offline' | 'starting' | 'stopping' = 'offline';
+    if (hostStatus.activeState === 'active') status = 'online';
+    else if (hostStatus.activeState === 'activating') status = 'starting';
+    else if (hostStatus.activeState === 'deactivating') status = 'stopping';
+
+    return {
+      isRunning: status !== 'offline',
+      pid: hostStatus.mainPid,
+      status,
+      uptime: hostStatus.uptime,
+      crashDiagnostic: this.lastCrashDiagnostic,
+      cpuPercent: hostStatus.cpuPercent,
+      memoryBytes: hostStatus.memoryBytes,
+    };
+  }
+
   public async start(): Promise<{ success: boolean; message: string }> {
+    if (this.hostControlService.isExternal()) {
+      return this.hostControlService.execute('start');
+    }
+
     if (this.serverProcess && !this.serverProcess.killed) {
       return { success: false, message: 'Server is already running' };
     }
@@ -277,6 +329,10 @@ export class ProcessService {
   }
 
   public async stop(): Promise<{ success: boolean; message: string }> {
+    if (this.hostControlService.isExternal()) {
+      return this.hostControlService.execute('stop');
+    }
+
     if (!this.serverProcess || this.serverProcess.killed) {
       this.serverStatus = 'offline';
       return { success: false, message: 'Server is not running' };
@@ -325,6 +381,10 @@ export class ProcessService {
   }
 
   public async restart(): Promise<{ success: boolean; message: string }> {
+    if (this.hostControlService.isExternal()) {
+      return this.hostControlService.execute('restart');
+    }
+
     if (this.serverProcess && !this.serverProcess.killed) {
       await this.stop();
     }
@@ -333,7 +393,11 @@ export class ProcessService {
     return this.start();
   }
 
-  public kill(): { success: boolean; message: string } {
+  public async kill(): Promise<{ success: boolean; message: string }> {
+    if (this.hostControlService.isExternal()) {
+      return this.hostControlService.execute('kill');
+    }
+
     if (this.serverProcess && !this.serverProcess.killed) {
       this.serverProcess.kill('SIGKILL');
       this.serverProcess = null;
@@ -345,6 +409,8 @@ export class ProcessService {
   }
 
   public sendStdinCommand(cmd: string): boolean {
+    if (this.hostControlService.isExternal()) return false;
+
     if (this.serverProcess && this.serverProcess.stdin && !this.serverProcess.stdin.destroyed) {
       this.serverProcess.stdin.write(`${cmd}\n`);
       return true;

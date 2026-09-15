@@ -101,6 +101,7 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(` MCServer Manager Backend running on port ${PORT}`);
   console.log(` WebSocket console active on ws://0.0.0.0:${PORT}/ws/console`);
   console.log(` Server root directory: ${config.rootPath}`);
+  console.log(` File explorer root: ${configService.getFileExplorerRoot()}`);
   console.log(` Initial setup done: ${config.initialSetupDone}`);
   console.log(`=======================================================`);
 });

@@ -145,12 +145,12 @@ export const FolderExplorerModal: React.FC<FolderExplorerModalProps> = ({
                   }`}
                   title={
                     isHomeMounted
-                      ? 'El directorio /home del host está montado correctamente en el contenedor'
-                      : 'El contenedor Docker está aislado. Mapea - /home:/home para acceder a tu usuario del host'
+                      ? 'El árbol HOST_HOME_PATH del host está montado y disponible para el explorador'
+                      : 'El contenedor no tiene montado el árbol del host. Configura HOST_HOME_PATH y reinicia el despliegue'
                   }
                 >
                   <span className={`w-1.5 h-1.5 rounded-full ${isHomeMounted ? 'bg-emerald-400' : 'bg-amber-400 animate-pulse'}`} />
-                  <span>{isHomeMounted ? 'Host /home conectado' : 'Host /home no montado'}</span>
+                  <span>{isHomeMounted ? 'Montaje host detectado' : 'Monta HOST_HOME_PATH'}</span>
                 </span>
               )}
             </div>
@@ -308,20 +308,20 @@ export const FolderExplorerModal: React.FC<FolderExplorerModalProps> = ({
                   <div className="mt-2 w-full max-w-md p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-left space-y-2.5 animate-fadeIn">
                     <div className="flex items-center gap-2 text-amber-300 font-medium text-xs">
                       <AlertCircle className="w-4 h-4 shrink-0 text-amber-400" />
-                      <span>¿Esperabas ver tus carpetas de la PC / Host aquí?</span>
+                      <span>¿Esperabas ver una carpeta del host aquí?</span>
                     </div>
                     <p className="text-[11px] text-slate-300 leading-relaxed">
-                      Al ejecutarse en Docker, el contenedor tiene un sistema de archivos aislado y no puede ver las carpetas de tu usuario (como <code className="text-amber-200 font-mono bg-amber-500/20 px-1 py-0.5 rounded">/home/ubuntu</code>) a menos que se mapeen como volumen.
+                      El explorador solo puede ver rutas que Docker haya montado. Para recorrer todo el home del host, monta <code className="text-amber-200 font-mono bg-amber-500/20 px-1 py-0.5 rounded">/home/vm</code> sobre la misma ruta dentro del contenedor mediante Dokploy.
                     </p>
                     <div className="space-y-1">
                       <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Solución en docker-compose.yml o Dokploy:</span>
                       <pre className="p-2 rounded-lg bg-black/60 border border-slate-800 font-mono text-[11px] text-emerald-400 select-all overflow-x-auto">
 {`volumes:
-  - /home:/home`}
+  - /home/vm:/home/vm:rw`}
                       </pre>
                     </div>
                     <p className="text-[10px] text-slate-400">
-                      💡 Tras añadir este volumen y reiniciar el contenedor, todas tus carpetas y archivos aparecerán aquí instantáneamente.
+                      💡 Tras añadir este volumen y reiniciar el contenedor, el home del host aparecerá dentro de /home/vm.
                     </p>
                   </div>
                 )}

@@ -3,7 +3,13 @@ import path from 'path';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { PanelConfig } from '../types';
-import { DEFAULT_SERVER_ROOT, DEFAULT_PORT, PANEL_CONFIG_FILE, SUBDIRS } from '../config/constants';
+import {
+  DEFAULT_FILE_EXPLORER_ROOT,
+  DEFAULT_SERVER_ROOT,
+  DEFAULT_PORT,
+  PANEL_CONFIG_FILE,
+  SUBDIRS,
+} from '../config/constants';
 
 export class ConfigService {
   private static instance: ConfigService;
@@ -26,11 +32,21 @@ export class ConfigService {
       try {
         const raw = fs.readFileSync(PANEL_CONFIG_FILE, 'utf-8');
         const parsed = JSON.parse(raw);
+        let configChanged = false;
+
+        // A persisted configuration from the old /home-based deployment must
+        // not silently retain access to a path that is no longer mounted.
+        if (typeof parsed.rootPath !== 'string' || !this.isLexicallyAllowed(path.resolve(parsed.rootPath))) {
+          parsed.rootPath = DEFAULT_SERVER_ROOT;
+          configChanged = true;
+        }
+
         if (!parsed.passwordHash) {
           parsed.passwordHash = bcrypt.hashSync(process.env.MASTER_PASSWORD || 'admin', 10);
           parsed.initialSetupDone = true;
-          this.saveConfig(parsed);
+          configChanged = true;
         }
+        if (configChanged) this.saveConfig(parsed);
         return parsed;
       } catch (err) {
         console.error('Failed to parse panel-config.json, re-initializing:', err);
@@ -71,6 +87,17 @@ export class ConfigService {
     }
 
     const resolved = path.resolve(newPath);
+    if (!this.isPathAllowed(resolved)) {
+      return {
+        success: false,
+        message: `Path must be inside one of the configured roots: ${this.getAllowedRoots().join(', ')}`,
+      };
+    }
+
+    if (fs.existsSync(resolved) && !fs.statSync(resolved).isDirectory()) {
+      return { success: false, message: 'Configured root path is not a directory' };
+    }
+
     this.config.rootPath = resolved;
     this.saveConfig(this.config);
     this.ensureDirectoryStructure();
@@ -99,33 +126,29 @@ export class ConfigService {
     return this.config.rootPath;
   }
 
+  /**
+   * Root used by the general file explorer. It can intentionally be broader
+   * than the Minecraft root (for example /home/vm) while all Minecraft
+   * services continue using getRootPath().
+   */
+  public getFileExplorerRoot(): string {
+    const explorerRoot = path.resolve(DEFAULT_FILE_EXPLORER_ROOT);
+    return this.isLexicallyAllowed(explorerRoot) ? explorerRoot : this.config.rootPath;
+  }
+
   public getServerDir(): string {
     const root = this.config.rootPath;
     const standardServerDir = path.join(root, SUBDIRS.SERVER);
 
-    // 1. If host has /server directly and it contains files or is a directory with items
-    if (fs.existsSync('/server') && fs.statSync('/server').isDirectory()) {
-      try {
-        const files = fs.readdirSync('/server');
-        if (files.length > 0) return '/server';
-      } catch {}
-    }
-
-    // 2. If standard <rootPath>/server exists, use it
-    if (fs.existsSync(standardServerDir)) {
-      return standardServerDir;
-    }
-
-    // 3. If root itself contains server files (e.g. server.properties, server.jar, mods, run.sh, eula.txt, etc.)
+    // Prefer a direct server root when it contains strong Minecraft markers.
+    // This must happen before checking <root>/server because that directory
+    // may have been created by ensureDirectoryStructure.
     const indicators = [
       'server.properties',
       'server.jar',
-      'mods',
       'libraries',
       'run.sh',
       'start.sh',
-      'run.bat',
-      'start.bat',
       'eula.txt',
       'world',
       'version-info.json',
@@ -135,6 +158,7 @@ export class ConfigService {
       return root;
     }
 
+    // Standard manager layout: <root>/server.
     return standardServerDir;
   }
 
@@ -154,11 +178,12 @@ export class ConfigService {
 
   public ensureDirectoryStructure(): void {
     const root = this.config.rootPath;
+    const serverDir = this.getServerDir();
     const dirs = [
       root,
-      path.join(root, SUBDIRS.SERVER),
-      path.join(root, SUBDIRS.MODS),
-      path.join(root, SUBDIRS.LOGS),
+      serverDir,
+      path.join(serverDir, 'mods'),
+      path.join(serverDir, 'logs'),
       path.join(root, SUBDIRS.PLAYIT),
       path.join(root, SUBDIRS.SCRIPTS),
     ];
@@ -184,14 +209,70 @@ export class ConfigService {
     scriptsExists: boolean;
   } {
     const root = targetPath ? path.resolve(targetPath) : this.config.rootPath;
+    if (!this.isPathAllowed(root)) {
+      throw new Error(`Path is outside the configured roots: ${root}`);
+    }
+
+    const serverDir = this.getServerDirForRoot(root);
     return {
       rootExists: fs.existsSync(root),
-      serverExists: fs.existsSync(path.join(root, SUBDIRS.SERVER)),
-      modsExists: fs.existsSync(path.join(root, SUBDIRS.MODS)),
-      logsExists: fs.existsSync(path.join(root, SUBDIRS.LOGS)),
-      propertiesExists: fs.existsSync(path.join(root, SUBDIRS.PROPERTIES)),
+      serverExists: fs.existsSync(serverDir),
+      modsExists: fs.existsSync(path.join(serverDir, 'mods')),
+      logsExists: fs.existsSync(path.join(serverDir, 'logs')),
+      propertiesExists: fs.existsSync(path.join(serverDir, 'server.properties')),
       playitExists: fs.existsSync(path.join(root, SUBDIRS.PLAYIT)),
       scriptsExists: fs.existsSync(path.join(root, SUBDIRS.SCRIPTS)),
     };
+  }
+
+  public getAllowedRoots(): string[] {
+    return (process.env.ALLOWED_ROOTS || '/data,/minecraft')
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+      .map((entry) => path.resolve(entry));
+  }
+
+  public isPathAllowed(targetPath: string): boolean {
+    const candidate = path.resolve(targetPath);
+    if (!this.isLexicallyAllowed(candidate)) return false;
+
+    // Reject symlinks that escape an allowed bind mount.
+    try {
+      const existingPath = this.findExistingAncestor(candidate);
+      const realCandidate = fs.realpathSync(existingPath);
+      return this.getAllowedRoots().some((allowedRoot) => {
+        const realRoot = fs.existsSync(allowedRoot) ? fs.realpathSync(allowedRoot) : allowedRoot;
+        return this.isWithin(realRoot, realCandidate);
+      });
+    } catch {
+      return false;
+    }
+  }
+
+  private getServerDirForRoot(root: string): string {
+    const standardServerDir = path.join(root, SUBDIRS.SERVER);
+    const indicators = ['server.properties', 'server.jar', 'libraries', 'run.sh', 'start.sh', 'eula.txt', 'world', 'version-info.json'];
+    if (indicators.some((indicator) => fs.existsSync(path.join(root, indicator)))) return root;
+    return standardServerDir;
+  }
+
+  private findExistingAncestor(candidate: string): string {
+    let current = candidate;
+    while (!fs.existsSync(current)) {
+      const parent = path.dirname(current);
+      if (parent === current) return current;
+      current = parent;
+    }
+    return current;
+  }
+
+  private isWithin(base: string, candidate: string): boolean {
+    const relative = path.relative(path.resolve(base), path.resolve(candidate));
+    return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
+  }
+
+  private isLexicallyAllowed(candidate: string): boolean {
+    return this.getAllowedRoots().some((allowedRoot) => this.isWithin(allowedRoot, candidate));
   }
 }

@@ -1,0 +1,19 @@
+[Unit]
+Description=User-scoped Minecraft manager systemd bridge
+After=default.target
+
+[Service]
+Type=simple
+UMask=007
+Environment=MC_SERVICE_NAME=minecraft.service
+Environment=MC_CONTROL_SOCKET=/run/user/1000/mcmanager/control.sock
+Environment=MC_SOCKET_GROUP=vm
+Environment=MC_SYSTEMCTL_SCOPE=user
+ExecStartPre=/usr/bin/mkdir -p /run/user/1000/mcmanager
+ExecStartPre=/usr/bin/chmod 0770 /run/user/1000/mcmanager
+ExecStart=/usr/local/libexec/mc-manager-bridge.py
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

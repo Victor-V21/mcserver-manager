@@ -45,6 +45,7 @@ export interface TelemetryData {
     list: Player[];
   };
   version: string;
+  controlError?: string | null;
   crashDiagnostic?: {
     modName: string;
     error: string;
@@ -121,6 +122,7 @@ export interface PathValidationStatus {
 
 export interface PanelSettings {
   serverRootPath: string;
+  fileExplorerRoot?: string;
   initialSetupDone?: boolean;
   validatedPaths: PathValidationStatus;
   autoRestartOnCrash: boolean;

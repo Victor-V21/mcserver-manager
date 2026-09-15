@@ -122,7 +122,7 @@ export class MonitorService {
   }
 
   public async getStatus(): Promise<any> {
-    const procStatus = this.processService.getStatus();
+    const procStatus = await this.processService.getStatus();
     const rootPath = this.configService.getRootPath();
     const serverDir = this.configService.getServerDir();
 
@@ -153,7 +153,10 @@ export class MonitorService {
 
     // 2. Real Java Process CPU & Memory (RSS)
     const maxAllocatedRamMb = this.getMaxAllocatedRamMb(serverDir);
-    if (procStatus.isRunning && procStatus.pid) {
+    if (procStatus.isRunning && procStatus.cpuPercent !== undefined) {
+      javaCpu = Math.round(procStatus.cpuPercent * 10) / 10;
+      javaMemMb = Math.round((procStatus.memoryBytes || 0) / (1024 * 1024));
+    } else if (procStatus.isRunning && procStatus.pid) {
       try {
         const javaPid = this.getJavaPid(procStatus.pid);
         const stats = await pidusage(javaPid);
@@ -300,6 +303,7 @@ export class MonitorService {
         list: playerList,
       },
       crashDiagnostic: (procStatus as any).crashDiagnostic || null,
+      controlError: (procStatus as any).controlError || null,
     };
   }
 }

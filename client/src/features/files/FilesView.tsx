@@ -189,7 +189,7 @@ export const FilesView: React.FC = () => {
             <h2 className="text-base font-bold text-white tracking-wide flex items-center gap-2">
               <span>Explorador de Archivos</span>
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-mono">
-                Raíz del Servidor
+                Raíz del Host
               </span>
             </h2>
             <p className="text-xs text-slate-400">
@@ -233,7 +233,7 @@ export const FilesView: React.FC = () => {
               currentPath === '' ? 'text-emerald-400 font-bold' : 'text-slate-400'
             }`}
           >
-            raiz (server_root)
+            raiz (explorer_root)
           </button>
 
           {breadcrumbParts.map((part, index) => {

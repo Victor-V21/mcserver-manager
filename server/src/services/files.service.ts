@@ -27,15 +27,23 @@ export class FilesService {
   }
 
   private resolveSafePath(relativePath: string = ''): string {
-    const root = this.configService.getRootPath();
-    const cleanRel = path.normalize(relativePath).replace(/^(\.\.[\/\\])+/, '');
-    const resolved = path.resolve(root, cleanRel);
+    const root = path.resolve(this.configService.getFileExplorerRoot());
+    const resolved = path.resolve(root, relativePath);
+    const relative = path.relative(root, resolved);
 
-    // Prevent directory traversal outside root
-    if (!resolved.startsWith(root)) {
-      return root;
+    if (relative !== '' && (relative.startsWith(`..${path.sep}`) || relative === '..' || path.isAbsolute(relative))) {
+      throw new Error('Path is outside the configured server root');
     }
+
+    if (!this.configService.isPathAllowed(resolved)) {
+      throw new Error('Path is outside the configured Docker bind mounts');
+    }
+
     return resolved;
+  }
+
+  public resolvePath(relativePath: string = ''): string {
+    return this.resolveSafePath(relativePath);
   }
 
   public listFiles(relativePath: string = ''): {
@@ -43,11 +51,11 @@ export class FilesService {
     parentPath: string | null;
     items: FileItem[];
   } {
-    const root = this.configService.getRootPath();
+    const root = this.configService.getFileExplorerRoot();
     const dirPath = this.resolveSafePath(relativePath);
 
     if (!fs.existsSync(dirPath)) {
-      fs.mkdirSync(dirPath, { recursive: true });
+      throw new Error(`Directory not found: ${relativePath || '/'}`);
     }
 
     const relFromRoot = path.relative(root, dirPath);
@@ -145,7 +153,7 @@ export class FilesService {
     }
 
     fs.mkdirSync(targetDir, { recursive: true });
-    const root = this.configService.getRootPath();
+    const root = this.configService.getFileExplorerRoot();
     return path.relative(root, targetDir);
   }
 
@@ -167,7 +175,7 @@ export class FilesService {
 
   public deleteItem(relativePath: string): void {
     const targetPath = this.resolveSafePath(relativePath);
-    const root = this.configService.getRootPath();
+    const root = this.configService.getFileExplorerRoot();
 
     // Prevent deleting root itself
     if (targetPath === root) {

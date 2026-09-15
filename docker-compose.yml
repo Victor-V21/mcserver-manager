@@ -6,23 +6,38 @@ services:
     image: mcserver-manager:latest
     container_name: mcserver-manager
     restart: unless-stopped
+    user: "${MC_UID:-1000}:${MC_GID:-1000}"
     ports:
       # Web panel & WebSocket
       - "3000:3000"
-      # Minecraft Java game port
-      - "25565:25565"
     environment:
       - PORT=3000
       - NODE_ENV=production
-      - SERVER_ROOT=/data
+      # SERVER_ROOT points to the existing Minecraft directory on the host.
+      # The same absolute path is mounted below, so no files are copied into
+      # the image and the manager can still browse all of HOST_HOME_PATH.
+      - SERVER_ROOT=${MINECRAFT_HOST_PATH:?Set MINECRAFT_HOST_PATH in Dokploy}
+      - FILE_EXPLORER_ROOT=${HOST_HOME_PATH:?Set HOST_HOME_PATH in Dokploy}
+      - ALLOWED_ROOTS=${HOST_HOME_PATH:?Set HOST_HOME_PATH in Dokploy},/data
       - PANEL_CONFIG_PATH=/data/panel-config.json
-      # Optional: set an initial master password (or leave empty to configure on first web login)
-      - MASTER_PASSWORD=admin
+      - MC_CONTROL_MODE=${MC_CONTROL_MODE:-external}
+      - MC_CONTROL_SOCKET=/run/mcmanager/control.sock
+      - MC_SERVICE_NAME=${MC_SERVICE_NAME:-minecraft.service}
+      - RCON_HOST=${RCON_HOST:-host.docker.internal}
+      - RCON_PORT=${RCON_PORT:-25575}
+      - RCON_PASSWORD=${RCON_PASSWORD:?Set RCON_PASSWORD in Dokploy}
+      - MASTER_PASSWORD=${MASTER_PASSWORD:?Set MASTER_PASSWORD in Dokploy}
+      - JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET in Dokploy}
     volumes:
-      # Persistent storage for Minecraft files, mods, and panel settings
-      - ./data:/data
-      # Mount host /home directory to allow exploring and managing PC/host user servers (e.g. /home/ubuntu)
-      - /home:/home
+      # Full host home requested by the manager. The source and destination
+      # are identical so paths shown by the explorer match the Linux host.
+      - ${HOST_HOME_PATH:?Set HOST_HOME_PATH in Dokploy}:${HOST_HOME_PATH:?Set HOST_HOME_PATH in Dokploy}:rw
+      # Manager configuration and persistent panel state.
+      - ${MANAGER_DATA_PATH:-./data}:/data:rw
+      # Narrow host bridge mount; this is not the Docker or D-Bus socket.
+      - ${MC_CONTROL_HOST_PATH:?Set MC_CONTROL_HOST_PATH in Dokploy}:/run/mcmanager:rw
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     logging:
       driver: "json-file"
       options:

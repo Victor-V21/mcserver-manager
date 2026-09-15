@@ -14,6 +14,7 @@ router.get('/', (_req: Request, res: Response) => {
   res.json({
     serverRootPath: config.rootPath,
     rootPath: config.rootPath,
+    fileExplorerRoot: configService.getFileExplorerRoot(),
     port: config.port,
     validatedPaths: {
       server: dirs.serverExists,
@@ -25,8 +26,8 @@ router.get('/', (_req: Request, res: Response) => {
     },
     directories: dirs,
     autoRestartOnCrash: true,
-    rconPort: 25575,
-    rconHost: '127.0.0.1',
+    rconPort: Number.parseInt(process.env.RCON_PORT || '25575', 10),
+    rconHost: process.env.RCON_HOST || '127.0.0.1',
     maxMemoryAllocated: '8192M',
     aiDiagnosticEnabled: config.aiDiagnosticEnabled,
     aiApiKey: config.aiApiKey,
@@ -57,6 +58,7 @@ router.post('/', (req: Request, res: Response) => {
   const settings = {
     serverRootPath: configService.getRootPath(),
     rootPath: configService.getRootPath(),
+    fileExplorerRoot: configService.getFileExplorerRoot(),
     validatedPaths: {
       server: dirs.serverExists,
       mods: dirs.modsExists,
@@ -67,8 +69,8 @@ router.post('/', (req: Request, res: Response) => {
     },
     directories: dirs,
     autoRestartOnCrash: true,
-    rconPort: 25575,
-    rconHost: '127.0.0.1',
+    rconPort: Number.parseInt(process.env.RCON_PORT || '25575', 10),
+    rconHost: process.env.RCON_HOST || '127.0.0.1',
     maxMemoryAllocated: '8192M',
     aiDiagnosticEnabled: config.aiDiagnosticEnabled,
     aiApiKey: config.aiApiKey,
@@ -141,39 +143,13 @@ function checkIsMinecraftDir(dirPath: string): boolean {
 function getSystemShortcuts(): { label: string; path: string; exists: boolean }[] {
   const shortcuts: { label: string; path: string; exists: boolean }[] = [];
 
-  // 1. Host user directories (/home)
-  if (fs.existsSync('/home')) {
-    shortcuts.push({ label: 'Host (/home)', path: '/home', exists: true });
-    try {
-      const homeEntries = fs.readdirSync('/home', { withFileTypes: true });
-      for (const entry of homeEntries) {
-        if (entry.isDirectory()) {
-          const userHome = path.join('/home', entry.name);
-          shortcuts.push({ label: `/home/${entry.name}`, path: userHome, exists: true });
-        }
-      }
-    } catch {}
+  for (const allowedRoot of configService.getAllowedRoots()) {
+    shortcuts.push({
+      label: allowedRoot === '/minecraft' ? 'Minecraft (/minecraft)' : `${allowedRoot} (permitido)`,
+      path: allowedRoot,
+      exists: fs.existsSync(allowedRoot),
+    });
   }
-
-  // 2. Alternative host mount paths if mounted as /host or /host/home
-  if (fs.existsSync('/host/home')) {
-    shortcuts.push({ label: 'Host (/host/home)', path: '/host/home', exists: true });
-  } else if (fs.existsSync('/host')) {
-    shortcuts.push({ label: 'Host (/host)', path: '/host', exists: true });
-  }
-
-  // 3. Docker persistent data directory
-  if (fs.existsSync('/data')) {
-    shortcuts.push({ label: '/data (Docker)', path: '/data', exists: true });
-  }
-
-  // 4. Container app directory
-  if (fs.existsSync('/app')) {
-    shortcuts.push({ label: '/app', path: '/app', exists: true });
-  }
-
-  // 5. Root directory
-  shortcuts.push({ label: '/ (Raíz)', path: '/', exists: true });
 
   return shortcuts;
 }
@@ -204,14 +180,13 @@ router.post('/browse-dirs', (req: Request, res: Response) => {
   let requestedPath = req.body.path;
   if (!requestedPath || typeof requestedPath !== 'string') {
     const configuredRoot = configService.getRootPath();
-    if (fs.existsSync(configuredRoot)) {
+    const firstExistingAllowedRoot = configService.getAllowedRoots().find((allowedRoot) => fs.existsSync(allowedRoot));
+    if (configService.isPathAllowed(configuredRoot) && fs.existsSync(configuredRoot)) {
       requestedPath = configuredRoot;
-    } else if (fs.existsSync('/home')) {
-      requestedPath = '/home';
-    } else if (fs.existsSync('/data')) {
-      requestedPath = '/data';
+    } else if (firstExistingAllowedRoot) {
+      requestedPath = firstExistingAllowedRoot;
     } else {
-      requestedPath = '/';
+      requestedPath = configService.getAllowedRoots()[0] || '/data';
     }
   }
 
@@ -219,8 +194,24 @@ router.post('/browse-dirs', (req: Request, res: Response) => {
   const { isDocker, isHomeMounted } = checkDockerMountStatus();
   const shortcuts = getSystemShortcuts();
 
+  if (!configService.isPathAllowed(targetPath)) {
+    res.status(403).json({
+      success: false,
+      exists: false,
+      currentPath: targetPath,
+      directories: [],
+      hasMinecraftFiles: false,
+      error: 'La ruta está fuera de los volúmenes permitidos del manager.',
+      shortcuts,
+      isDocker,
+      isHomeMounted,
+    });
+    return;
+  }
+
   if (!fs.existsSync(targetPath)) {
-    const parent = targetPath === '/' ? null : path.dirname(targetPath);
+    const parentCandidate = targetPath === '/' ? null : path.dirname(targetPath);
+    const parent = parentCandidate && configService.isPathAllowed(parentCandidate) ? parentCandidate : null;
     res.json({
       success: false,
       exists: false,
@@ -260,7 +251,8 @@ router.post('/browse-dirs', (req: Request, res: Response) => {
     }
 
     const hasMinecraftFiles = checkIsMinecraftDir(targetPath);
-    const parentPath = targetPath === '/' ? null : path.dirname(targetPath);
+    const parentCandidate = targetPath === '/' ? null : path.dirname(targetPath);
+    const parentPath = parentCandidate && configService.isPathAllowed(parentCandidate) ? parentCandidate : null;
 
     res.json({
       success: true,

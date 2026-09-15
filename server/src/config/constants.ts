@@ -1,6 +1,7 @@
 import path from 'path';
 
-export const DEFAULT_SERVER_ROOT = process.env.SERVER_ROOT || '/home/vm/mcserver';
+export const DEFAULT_SERVER_ROOT = process.env.SERVER_ROOT || '/data';
+export const DEFAULT_FILE_EXPLORER_ROOT = process.env.FILE_EXPLORER_ROOT || DEFAULT_SERVER_ROOT;
 export const DEFAULT_PORT = parseInt(process.env.PORT || '3000', 10);
 export const PANEL_CONFIG_FILE = process.env.PANEL_CONFIG_PATH || path.join(process.cwd(), 'panel-config.json');
 
