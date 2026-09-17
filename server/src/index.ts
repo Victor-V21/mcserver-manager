@@ -7,6 +7,8 @@ import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 
 import { ConfigService } from './services/config.service';
+import { ProcessService } from './services/process.service';
+import { PlayitService } from './services/playit.service';
 import { authMiddleware } from './middlewares/auth.middleware';
 import { setupConsoleWebSocket } from './ws/console.ws';
 
@@ -26,6 +28,8 @@ const app = express();
 const server = http.createServer(app);
 const configService = ConfigService.getInstance();
 const config = configService.getConfig();
+const processService = ProcessService.getInstance();
+const playitService = PlayitService.getInstance();
 
 // CORS setup
 app.use(
@@ -104,11 +108,23 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(` File explorer root: ${configService.getFileExplorerRoot()}`);
   console.log(` Initial setup done: ${config.initialSetupDone}`);
   console.log(`=======================================================`);
+
+  if (process.env.MINECRAFT_AUTOSTART !== 'false') {
+    processService.start().then((result) => console.log(`[Minecraft] ${result.message}`)).catch((error) => {
+      console.error(`[Minecraft] ${error.message}`);
+    });
+  }
+  if (process.env.PLAYIT_AUTOSTART === 'true') {
+    playitService.start().then((result) => console.log(`[Playit] ${result.message}`)).catch((error) => {
+      console.error(`[Playit] ${error.message}`);
+    });
+  }
 });
 
 // Handle graceful shutdown
-const shutdown = () => {
+const shutdown = async () => {
   console.log('Shutting down server gracefully...');
+  await Promise.allSettled([processService.shutdown(), playitService.shutdown()]);
   server.close(() => {
     console.log('HTTP and WebSocket server closed.');
     process.exit(0);

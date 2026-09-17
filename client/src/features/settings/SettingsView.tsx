@@ -18,7 +18,7 @@ import {
 
 export const SettingsView: React.FC = () => {
   const [settings, setSettings] = useState<PanelSettings | null>(null);
-  const [rootPath, setRootPath] = useState('/home/vm');
+  const [rootPath, setRootPath] = useState('/data');
   const [showFolderExplorer, setShowFolderExplorer] = useState(false);
   const [validation, setValidation] = useState<PathValidationStatus>({
     server: true,
@@ -51,7 +51,7 @@ export const SettingsView: React.FC = () => {
     try {
       const data = await api.getSettings();
       setSettings(data);
-      setRootPath(data.serverRootPath || '/home/vm');
+      setRootPath(data.serverRootPath || '/data');
       setAiDiagnosticEnabled(!!data.aiDiagnosticEnabled);
       setAiApiKey(data.aiApiKey || '');
       setAiModel(data.aiModel || 'gemini-3-flash-preview');
@@ -111,11 +111,15 @@ export const SettingsView: React.FC = () => {
       setPassError('Las contraseñas no coinciden');
       return;
     }
-    setSuccessMessage('Contraseña actualizada con éxito');
-    setCurrentPass('');
-    setNewPass('');
-    setConfirmPass('');
-    setTimeout(() => setSuccessMessage(null), 3000);
+    api.changePassword(currentPass, newPass)
+      .then(() => {
+        setSuccessMessage('Contraseña actualizada con éxito');
+        setCurrentPass('');
+        setNewPass('');
+        setConfirmPass('');
+        setTimeout(() => setSuccessMessage(null), 3000);
+      })
+      .catch((err: any) => setPassError(err.message || 'No se pudo actualizar la contraseña'));
   };
 
   const pathsList = [
@@ -179,7 +183,8 @@ export const SettingsView: React.FC = () => {
                 type="text"
                 value={rootPath}
                 onChange={(e) => setRootPath(e.target.value)}
-                placeholder="/home/vm/ruta-del-servidor o /data"
+                placeholder="/data"
+                readOnly
                 className="w-full px-3.5 py-2.5 bg-dark-950 border border-slate-700 rounded-xl text-xs text-white font-mono focus:outline-none focus:border-emerald-500 pr-9"
               />
               <button
@@ -350,27 +355,27 @@ export const SettingsView: React.FC = () => {
         </div>
       </div>
 
-      {/* Network / Daemon Info Card */}
+      {/* Container runtime info card */}
       {settings && (
         <div className="glass-panel rounded-2xl p-4 sm:p-5 border border-slate-800 space-y-3">
           <div className="flex items-center gap-2 pb-3 border-b border-slate-800">
             <Terminal className="w-4 h-4 text-cyan-400" />
-            <h3 className="text-sm font-semibold text-white">Parámetros de Red</h3>
+            <h3 className="text-sm font-semibold text-white">Almacenamiento y proceso</h3>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs font-mono">
             <div className="p-2.5 rounded-xl bg-dark-950 border border-slate-800">
-              <span className="text-slate-500 block text-[10px]">RCON HOST</span>
-              <span className="text-slate-200">{settings.rconHost}</span>
+              <span className="text-slate-500 block text-[10px]">DATOS PERSISTENTES</span>
+              <span className="text-slate-200">{settings.storageRoot || '/data'}</span>
             </div>
             <div className="p-2.5 rounded-xl bg-dark-950 border border-slate-800">
-              <span className="text-slate-500 block text-[10px]">RCON PORT</span>
-              <span className="text-cyan-400">{settings.rconPort}</span>
+              <span className="text-slate-500 block text-[10px]">MINECRAFT</span>
+              <span className="text-cyan-400">Java / 25565</span>
             </div>
             <div className="p-2.5 rounded-xl bg-dark-950 border border-slate-800 col-span-2 sm:col-span-1">
-              <span className="text-slate-500 block text-[10px]">AUTO-RESTART</span>
-              <span className="text-emerald-400">
-                {settings.autoRestartOnCrash ? 'Habilitado' : 'Deshabilitado'}
+                <span className="text-slate-500 block text-[10px]">ARRANQUE AUTOMÁTICO</span>
+                <span className="text-emerald-400">
+                {settings.minecraftAutostart ? 'Habilitado' : 'Deshabilitado'}
               </span>
             </div>
           </div>
@@ -380,9 +385,11 @@ export const SettingsView: React.FC = () => {
       <FolderExplorerModal
         isOpen={showFolderExplorer}
         onClose={() => setShowFolderExplorer(false)}
-        onSelect={(selectedPath) => {
-          setRootPath(selectedPath);
-          handleValidatePath(selectedPath);
+        onSelect={() => {
+          // /data is intentionally fixed; the explorer is for inspection,
+          // not for changing the container's storage boundary.
+          setRootPath('/data');
+          handleValidatePath('/data');
         }}
         initialPath={rootPath}
       />

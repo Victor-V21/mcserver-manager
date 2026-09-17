@@ -1,12 +1,11 @@
 import fs from 'fs';
 import path from 'path';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import si from 'systeminformation';
 import pidusage from 'pidusage';
 import os from 'os';
 import { ConfigService } from './config.service';
 import { ProcessService } from './process.service';
-import { RconService } from './rcon.service';
 import { PropertiesService } from './properties.service';
 import { VersionsService } from './versions.service';
 import { SUBDIRS } from '../config/constants';
@@ -16,249 +15,157 @@ export class MonitorService {
   private static instance: MonitorService;
   private configService: ConfigService;
   private processService: ProcessService;
-  private rconService: RconService;
   private propertiesService: PropertiesService;
   private versionsService: VersionsService;
-
-  private lastDiskCheck: number = 0;
+  private lastDiskCheck = 0;
   private cachedDiskSize: { mb: number; formatted: string } = { mb: 0, formatted: '0 MB' };
 
   private constructor() {
     this.configService = ConfigService.getInstance();
     this.processService = ProcessService.getInstance();
-    this.rconService = RconService.getInstance();
     this.propertiesService = PropertiesService.getInstance();
     this.versionsService = VersionsService.getInstance();
   }
 
   public static getInstance(): MonitorService {
-    if (!MonitorService.instance) {
-      MonitorService.instance = new MonitorService();
-    }
+    if (!MonitorService.instance) MonitorService.instance = new MonitorService();
     return MonitorService.instance;
   }
 
-  /**
-   * Find the actual Java PID, whether parentPid is Java itself or a bash wrapper (run.sh / start.sh)
-   */
   private getJavaPid(parentPid: number): number {
     try {
-      const comm = execSync(`ps -p ${parentPid} -o comm= 2>/dev/null`, { encoding: 'utf-8' }).trim();
-      if (comm.toLowerCase().includes('java')) {
-        return parentPid;
-      }
-
-      const pgrep = execSync(`pgrep -P ${parentPid} 2>/dev/null`, { encoding: 'utf-8' }).trim();
-      if (pgrep) {
-        const childPids = pgrep.split(/\s+/).map(Number).filter(Boolean);
-        for (const cPid of childPids) {
-          const childComm = execSync(`ps -p ${cPid} -o comm= 2>/dev/null`, { encoding: 'utf-8' }).trim();
-          if (childComm.toLowerCase().includes('java')) {
-            return cPid;
-          }
-        }
-        for (const cPid of childPids) {
-          const grand = this.getJavaPid(cPid);
-          if (grand !== cPid) return grand;
-        }
+      const comm = execFileSync('ps', ['-p', String(parentPid), '-o', 'comm='], { encoding: 'utf-8' }).trim();
+      if (comm.toLowerCase().includes('java')) return parentPid;
+      const children = execFileSync('pgrep', ['-P', String(parentPid)], { encoding: 'utf-8' })
+        .trim().split(/\s+/).map(Number).filter(Boolean);
+      for (const childPid of children) {
+        const childComm = execFileSync('ps', ['-p', String(childPid), '-o', 'comm='], { encoding: 'utf-8' }).trim();
+        if (childComm.toLowerCase().includes('java')) return childPid;
+        const nestedPid = this.getJavaPid(childPid);
+        if (nestedPid !== childPid) return nestedPid;
       }
     } catch {}
     return parentPid;
   }
 
-  /**
-   * Read configured maximum heap RAM (-Xmx) in MB from user_jvm_args.txt or start.sh
-   */
   private getMaxAllocatedRamMb(serverDir: string): number {
-    try {
-      const jvmArgsPath = path.join(serverDir, 'user_jvm_args.txt');
-      if (fs.existsSync(jvmArgsPath)) {
-        const content = fs.readFileSync(jvmArgsPath, 'utf-8');
+    const candidates = [path.join(serverDir, 'user_jvm_args.txt'), path.join(serverDir, 'run.sh'), this.configService.resolvePath(SUBDIRS.START_SCRIPT)];
+    for (const candidate of candidates) {
+      try {
+        if (!fs.existsSync(candidate)) continue;
+        const content = fs.readFileSync(candidate, 'utf8');
         const match = content.match(/-Xmx([0-9]+)([gGmM])/);
-        if (match) {
-          const val = parseInt(match[1], 10);
-          const unit = match[2].toUpperCase();
-          return unit === 'G' ? val * 1024 : val;
-        }
-      }
-
-      const scriptsStart = this.configService.resolvePath(SUBDIRS.START_SCRIPT);
-      if (fs.existsSync(scriptsStart)) {
-        const content = fs.readFileSync(scriptsStart, 'utf-8');
-        const match = content.match(/-Xmx([0-9]+)([gGmM])/);
-        if (match) {
-          const val = parseInt(match[1], 10);
-          const unit = match[2].toUpperCase();
-          return unit === 'G' ? val * 1024 : val;
-        }
-      }
-    } catch {}
-    return 4096;
+        if (!match) continue;
+        const value = Number(match[1]);
+        return match[2].toLowerCase() === 'g' ? value * 1024 : value;
+      } catch {}
+    }
+    return 0;
   }
 
-  /**
-   * Calculate disk usage of the Minecraft server directory with a 15-second cache
-   */
   private getServerDirSize(serverDir: string): { mb: number; formatted: string } {
     const now = Date.now();
-    if (now - this.lastDiskCheck < 15000 && this.cachedDiskSize.mb > 0) {
-      return this.cachedDiskSize;
-    }
-
+    if (now - this.lastDiskCheck < 15000) return this.cachedDiskSize;
     try {
       if (fs.existsSync(serverDir)) {
-        const out = execSync(`du -sm "${serverDir}" 2>/dev/null`, { encoding: 'utf-8' });
-        const match = out.match(/^([0-9]+)/);
+        const output = execFileSync('du', ['-sm', serverDir], { encoding: 'utf8' });
+        const match = output.match(/^(\d+)/);
         if (match) {
-          const mb = parseInt(match[1], 10);
-          const formatted = mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${mb} MB`;
-          this.cachedDiskSize = { mb, formatted };
-          this.lastDiskCheck = now;
-          return this.cachedDiskSize;
+          const mb = Number(match[1]);
+          this.cachedDiskSize = { mb, formatted: mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${mb} MB` };
         }
       }
     } catch {}
+    this.lastDiskCheck = now;
     return this.cachedDiskSize;
+  }
+
+  private getFilesystemUsage(serverDir: string): { used: number; total: number; free: number; percent: number } {
+    try {
+      const stat = fs.statfsSync(serverDir);
+      const blockSize = Number(stat.bsize);
+      const total = (Number(stat.blocks) * blockSize) / (1024 ** 3);
+      const free = (Number(stat.bavail) * blockSize) / (1024 ** 3);
+      const used = Math.max(0, total - free);
+      return { used, total, free, percent: total > 0 ? Math.round((used / total) * 100) : 0 };
+    } catch {
+      return { used: 0, total: 0, free: 0, percent: 0 };
+    }
+  }
+
+  private getPlayersFromLog(serverDir: string): PlayerInfo[] {
+    const active = new Set<string>();
+    try {
+      const logPath = path.join(serverDir, 'logs', 'latest.log');
+      if (!fs.existsSync(logPath)) return [];
+      const log = fs.readFileSync(logPath, 'utf8');
+      for (const line of log.split(/\r?\n/)) {
+        const joined = line.match(/\]:\s*([A-Za-z0-9_]{1,16}) joined the game/i);
+        const left = line.match(/\]:\s*([A-Za-z0-9_]{1,16}) left the game/i);
+        if (joined) active.add(joined[1]);
+        if (left) active.delete(left[1]);
+      }
+    } catch {}
+    return Array.from(active).map((name) => ({
+      name,
+      avatarUrl: `https://crafatar.com/avatars/${encodeURIComponent(name)}?size=48&default=MHF_Steve`,
+    }));
   }
 
   public async getStatus(): Promise<any> {
     const procStatus = await this.processService.getStatus();
-    const rootPath = this.configService.getRootPath();
     const serverDir = this.configService.getServerDir();
-
-    // Default safe metrics
     let hostCpu = 0;
     let javaCpu = 0;
     let javaMemMb = 0;
     let memUsed = 0;
-    let memTotal = 8192;
+    let memTotal = 0;
     let memPercent = 0;
-    let diskUsed = 0;
-    let diskTotal = 50;
-    let diskPercent = 0;
-    let maxPlayers = 20;
 
-    // 1. Host CPU & Memory
     try {
-      const [cpuLoad, mem] = await Promise.all([si.currentLoad(), si.mem()]);
+      const [cpuLoad, memory] = await Promise.all([si.currentLoad(), si.mem()]);
       hostCpu = Math.round((cpuLoad?.currentLoad || 0) * 10) / 10;
-      if (mem && mem.total) {
-        memTotal = Math.round(mem.total / (1024 * 1024)); // MB
-        memUsed = Math.round((mem.active || 0) / (1024 * 1024)); // MB
-        memPercent = Math.round((memUsed / memTotal) * 100);
+      if (memory?.total) {
+        memTotal = Math.round(memory.total / (1024 * 1024));
+        memUsed = Math.round((memory.active || 0) / (1024 * 1024));
+        memPercent = memTotal > 0 ? Math.round((memUsed / memTotal) * 100) : 0;
       }
-    } catch (err) {
-      console.warn('Could not read host CPU/RAM:', err);
+    } catch (error) {
+      console.warn('[MonitorService] No se pudo leer CPU/RAM:', error);
     }
 
-    // 2. Real Java Process CPU & Memory (RSS)
+    if (procStatus.isRunning && procStatus.pid) {
+      try {
+        const stats = await pidusage(this.getJavaPid(procStatus.pid));
+        const cores = os.cpus().length || 1;
+        javaCpu = Math.round((stats.cpu / cores) * 10) / 10;
+        javaMemMb = Math.round((stats.memory || 0) / (1024 * 1024));
+      } catch {}
+    }
+
     const maxAllocatedRamMb = this.getMaxAllocatedRamMb(serverDir);
-    if (procStatus.isRunning && procStatus.cpuPercent !== undefined) {
-      javaCpu = Math.round(procStatus.cpuPercent * 10) / 10;
-      javaMemMb = Math.round((procStatus.memoryBytes || 0) / (1024 * 1024));
-    } else if (procStatus.isRunning && procStatus.pid) {
-      try {
-        const javaPid = this.getJavaPid(procStatus.pid);
-        const stats = await pidusage(javaPid);
-        if (stats) {
-          const numCores = os.cpus().length || 1;
-          javaCpu = Math.round((stats.cpu / numCores) * 10) / 10;
-          javaMemMb = Math.round((stats.memory || 0) / (1024 * 1024));
-        }
-      } catch {}
-    }
-
-    const ramUsed = procStatus.isRunning ? javaMemMb : 0;
-    const ramPercent = maxAllocatedRamMb > 0 ? Math.min(100, Math.round((ramUsed / maxAllocatedRamMb) * 100)) : 0;
-
-    // 3. Server folder footprint (No longer reading host disk size)
+    const ramPercent = maxAllocatedRamMb > 0 ? Math.min(100, Math.round((javaMemMb / maxAllocatedRamMb) * 100)) : 0;
     const serverDirSize = this.getServerDirSize(serverDir);
+    const filesystem = this.getFilesystemUsage(serverDir);
 
-    // 4. Server max players from properties
-    try {
-      const { properties } = this.propertiesService.getProperties();
-      if (properties && properties['max-players']) {
-        maxPlayers = parseInt(properties['max-players'], 10) || 20;
-      }
-    } catch {}
-
-    // 5. Online players, TPS, and MSPT (avgTickMs) via RCON
-    let onlineCount = 0;
-    let playerList: PlayerInfo[] = [];
-    let tps = procStatus.isRunning ? 20.0 : 0;
-    let avgTickMs: number | undefined = undefined;
-
-    if (procStatus.isRunning && procStatus.status === 'online') {
+    let maxPlayers = 0;
+    const propertiesPath = this.configService.resolvePath(SUBDIRS.PROPERTIES);
+    if (fs.existsSync(propertiesPath)) {
       try {
-        if (this.rconService.isConnected()) {
-          const listRes = await this.rconService.sendCommand('list');
-          const colonIdx = listRes.indexOf(':');
-          if (colonIdx !== -1) {
-            const namesPart = listRes.slice(colonIdx + 1).trim();
-            if (namesPart.length > 0) {
-              const names = namesPart.split(',').map((n) => n.trim()).filter(Boolean);
-              onlineCount = names.length;
-              playerList = names.map((name) => ({
-                name,
-                avatarUrl: `https://crafatar.com/avatars/${encodeURIComponent(name)}?size=48&default=MHF_Steve`,
-              }));
-            }
-          }
-
-          // Query NeoForge / Forge TPS and ms/tick
-          try {
-            const tpsRes = await this.rconService.sendCommand('neoforge tps');
-            // Sample: "Overall: 20.000 TPS (0.448 ms/tick)"
-            const tpsMatch =
-              tpsRes.match(/(?:Overall|Mean TPS|current TPS)[:\s]+([\d.]+)/i) ||
-              tpsRes.match(/([\d.]+)\s*TPS/i);
-            if (tpsMatch && tpsMatch[1]) {
-              tps = Math.round(parseFloat(tpsMatch[1]) * 10) / 10;
-            }
-            const tickMatch = tpsRes.match(/\(([\d.]+)\s*ms\/tick\)/i);
-            if (tickMatch && tickMatch[1]) {
-              avgTickMs = Math.round(parseFloat(tickMatch[1]) * 100) / 100;
-            }
-          } catch {}
-
-          // Query Vanilla / Fabric 1.20+ tick query fallback
-          if (avgTickMs === undefined) {
-            try {
-              const tickRes = await this.rconService.sendCommand('tick query');
-              // Sample: "Average time per tick: 0.4ms"
-              const tickMatch = tickRes.match(/(?:Average time per tick|time per tick)[:\s]+([\d.]+)\s*ms/i);
-              if (tickMatch && tickMatch[1]) {
-                avgTickMs = Math.round(parseFloat(tickMatch[1]) * 100) / 100;
-              }
-              const tpsMatch = tickRes.match(/([\d.]+)\s*TPS/i);
-              if (tpsMatch && tpsMatch[1] && tps === 20.0) {
-                tps = Math.round(parseFloat(tpsMatch[1]) * 10) / 10;
-              }
-            } catch {}
-          }
-        }
+        const { properties } = this.propertiesService.getProperties();
+        const configuredMax = Number(properties['max-players']);
+        if (Number.isFinite(configuredMax)) maxPlayers = configuredMax;
       } catch {}
     }
 
-    if (avgTickMs === undefined && procStatus.isRunning && procStatus.status === 'online') {
-      // Sub-millisecond tick baseline for idle server
-      avgTickMs = 0.45;
-    }
-
+    const playerList = procStatus.isRunning ? this.getPlayersFromLog(serverDir) : [];
     const installed = this.versionsService.getInstalledVersion();
     let displayVersion: string | null = null;
     if (installed.installed) {
-      if (installed.formattedVersion) {
-        displayVersion = installed.formattedVersion;
-      } else if (installed.mcVersion && installed.loaderVersion) {
-        displayVersion = `Minecraft ${installed.mcVersion} (${installed.loader === 'neoforge' ? 'NeoForge' : installed.loader} ${installed.loaderVersion})`;
-      } else if (installed.mcVersion) {
-        displayVersion = `Minecraft ${installed.mcVersion} (${installed.loader === 'neoforge' ? 'NeoForge' : 'Vanilla'})`;
-      } else if (installed.loaderVersion) {
-        displayVersion = `NeoForge ${installed.loaderVersion}`;
-      } else {
-        displayVersion = 'Minecraft Servidor';
-      }
+      if (installed.formattedVersion) displayVersion = installed.formattedVersion;
+      else if (installed.mcVersion && installed.loaderVersion) displayVersion = `Minecraft ${installed.mcVersion} (${installed.loader === 'neoforge' ? 'NeoForge' : installed.loader} ${installed.loaderVersion})`;
+      else if (installed.mcVersion) displayVersion = `Minecraft ${installed.mcVersion} (${installed.loader === 'neoforge' ? 'NeoForge' : 'Vanilla'})`;
+      else if (installed.loaderVersion) displayVersion = `NeoForge ${installed.loaderVersion}`;
     }
 
     return {
@@ -270,40 +177,30 @@ export class MonitorService {
       version: displayVersion,
       serverDir: installed.serverDir || serverDir,
       installedVersion: installed,
-      cpu: {
-        host: hostCpu,
-        java: javaCpu,
-      },
+      cpu: { host: hostCpu, java: javaCpu },
       hostCpu,
       ram: {
-        used: ramUsed, // Real Minecraft Java process RAM in MB
-        total: memTotal, // System host total RAM in MB
-        percent: ramPercent, // % of max allocated RAM used
-        maxAllocated: maxAllocatedRamMb, // -Xmx configured in MB
-        systemUsed: memUsed, // Host active RAM in MB
+        used: procStatus.isRunning ? javaMemMb : 0,
+        total: memTotal,
+        percent: ramPercent,
+        maxAllocated: maxAllocatedRamMb,
+        systemUsed: memUsed,
         systemTotal: memTotal,
         systemPercent: memPercent,
       },
       disk: {
-        used: serverDirSize.mb / 1024, // Just a placeholder if they use 'used', we report in GB
-        total: 0,
-        free: 0,
-        percent: 0,
-        serverSizeMb: serverDirSize.mb, // Real Minecraft server folder size (MB)
-        serverSizeFormatted: serverDirSize.formatted, // e.g. "180 MB"
+        used: filesystem.used,
+        total: filesystem.total,
+        free: filesystem.free,
+        percent: filesystem.percent,
+        serverSizeMb: serverDirSize.mb,
+        serverSizeFormatted: serverDirSize.formatted,
       },
-      tps: {
-        current: tps,
-        avgTickMs: avgTickMs !== undefined ? avgTickMs : (procStatus.isRunning ? 0.45 : 0),
-        history: [tps, tps, tps, tps, tps],
-      },
-      players: {
-        online: onlineCount,
-        max: maxPlayers,
-        list: playerList,
-      },
-      crashDiagnostic: (procStatus as any).crashDiagnostic || null,
-      controlError: (procStatus as any).controlError || null,
+      // TPS requires server-side instrumentation. It is deliberately null
+      // instead of a fabricated 20 TPS value when no sampler is installed.
+      tps: { current: null, avgTickMs: null, history: [] },
+      players: { online: playerList.length, max: maxPlayers, list: playerList },
+      crashDiagnostic: procStatus.crashDiagnostic || null,
     };
   }
 }

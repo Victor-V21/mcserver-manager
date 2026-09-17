@@ -4,7 +4,6 @@ import fs from 'fs';
 import path from 'path';
 import jwt from 'jsonwebtoken';
 import { ConfigService } from '../services/config.service';
-import { RconService } from '../services/rcon.service';
 import { ProcessService } from '../services/process.service';
 import { VersionsService } from '../services/versions.service';
 import { SUBDIRS } from '../config/constants';
@@ -17,7 +16,6 @@ interface ConsoleMessage {
 export function setupConsoleWebSocket(server: HttpServer): WebSocketServer {
   const wss = new WebSocketServer({ server, path: '/ws/console' });
   const configService = ConfigService.getInstance();
-  const rconService = RconService.getInstance();
   const processService = ProcessService.getInstance();
   const versionsService = VersionsService.getInstance();
 
@@ -137,29 +135,12 @@ export function setupConsoleWebSocket(server: HttpServer): WebSocketServer {
           const cmd = parsed.command.trim();
           ws.send(JSON.stringify({ type: 'log', data: `§7> ${cmd}` }));
 
-          // 1. Try RCON
-          try {
-            if (rconService.isConnected()) {
-              const res = await rconService.sendCommand(cmd);
-              if (res && res.trim()) {
-                const resLines = res.split(/\r?\n/);
-                for (const line of resLines) {
-                  ws.send(JSON.stringify({ type: 'log', data: line }));
-                }
-              }
-              return;
-            }
-          } catch (rconErr: any) {
-            console.warn('RCON command execution failed, trying process stdin:', rconErr.message);
-          }
-
-          // 2. Fallback to process stdin
-          const sent = processService.sendStdinCommand(cmd);
+          const sent = processService.sendCommand(cmd);
           if (!sent) {
             ws.send(
               JSON.stringify({
                 type: 'log',
-                data: '§c[Error] Could not send command: Server is offline and RCON is disconnected.',
+                data: '§c[Error] El servidor está detenido o todavía no acepta comandos.',
               })
             );
           }

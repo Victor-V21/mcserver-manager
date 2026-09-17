@@ -84,6 +84,12 @@ export const api = {
   logout: async (): Promise<{ success: boolean }> => {
     return request('/api/auth/logout', { method: 'POST' });
   },
+  changePassword: async (currentPassword: string, newPassword: string): Promise<{ success: boolean }> => {
+    return request('/api/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+  },
 
   // Status & Telemetry
   getStatus: async (): Promise<TelemetryData> => {
@@ -105,7 +111,7 @@ export const api = {
     });
   },
 
-  // RCON Command
+  // Server console command
   sendCommand: async (command: string): Promise<{ success: boolean; response?: string }> => {
     return request('/api/server/command', {
       method: 'POST',
@@ -252,6 +258,15 @@ export const api = {
   getPlayitStatus: async (): Promise<PlayitStatus> => {
     return request('/api/playit/status', { method: 'GET' });
   },
+  getPlayitConfig: async (): Promise<{ configured: boolean; localPort: number; secretPath: string; binaryPath: string | null }> => {
+    return request('/api/playit/config', { method: 'GET' });
+  },
+  savePlayitConfig: async (localPort: number): Promise<{ success: boolean; localPort: number }> => {
+    return request('/api/playit/config', {
+      method: 'PUT',
+      body: JSON.stringify({ localPort }),
+    });
+  },
   executePlayitAction: async (action: 'start' | 'stop' | 'restart'): Promise<{ success: boolean; message: string }> => {
     return request('/api/playit/action', {
       method: 'POST',
@@ -284,7 +299,7 @@ export const api = {
     hasMinecraftFiles: boolean;
     shortcuts: { label: string; path: string; exists: boolean }[];
     isDocker?: boolean;
-    isHomeMounted?: boolean;
+    storageReady?: boolean;
     error?: string;
   }> => {
     return request('/api/settings/browse-dirs', {

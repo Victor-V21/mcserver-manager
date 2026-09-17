@@ -12,7 +12,7 @@ router.get('/', async (_req: Request, res: Response) => {
     const status = await monitorService.getStatus();
     res.json(status);
   } catch (err: any) {
-    console.error('Error fetching status, returning safe fallback:', err);
+    console.error('Error fetching status, returning empty status:', err);
     res.json({
       isRunning: false,
       state: 'offline',
@@ -22,10 +22,10 @@ router.get('/', async (_req: Request, res: Response) => {
       version: null,
       cpu: { host: 0, java: 0 },
       hostCpu: 0,
-      ram: { used: 0, total: 8192, percent: 0, maxAllocated: 8192 },
-      disk: { used: 0, total: 50, free: 50, percent: 0 },
-      tps: { current: 0, history: [0, 0, 0, 0, 0] },
-      players: { online: 0, max: 20, list: [] },
+      ram: { used: 0, total: 0, percent: 0, maxAllocated: 0 },
+      disk: { used: 0, total: 0, free: 0, percent: 0 },
+      tps: { current: null, avgTickMs: null, history: [] },
+      players: { online: 0, max: 0, list: [] },
     });
   }
 });
@@ -62,6 +62,22 @@ router.post('/server/action', async (req: Request, res: Response) => {
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Action failed' });
   }
+});
+
+// POST /api/server/command
+router.post('/server/command', (req: Request, res: Response) => {
+  const command = req.body?.command;
+  if (typeof command !== 'string' || !command.trim()) {
+    res.status(400).json({ error: 'Command is required' });
+    return;
+  }
+
+  const sent = processService.sendCommand(command);
+  if (!sent) {
+    res.status(409).json({ success: false, error: 'El servidor está detenido o no acepta comandos todavía' });
+    return;
+  }
+  res.json({ success: true, response: 'Comando enviado a la consola del servidor' });
 });
 
 // POST /api/status/diagnose-ai

@@ -36,7 +36,7 @@ export class ConfigService {
 
         // A persisted configuration from the old /home-based deployment must
         // not silently retain access to a path that is no longer mounted.
-        if (typeof parsed.rootPath !== 'string' || !this.isLexicallyAllowed(path.resolve(parsed.rootPath))) {
+        if (typeof parsed.rootPath !== 'string' || path.resolve(parsed.rootPath) !== path.resolve(DEFAULT_SERVER_ROOT)) {
           parsed.rootPath = DEFAULT_SERVER_ROOT;
           configChanged = true;
         }
@@ -87,6 +87,9 @@ export class ConfigService {
     }
 
     const resolved = path.resolve(newPath);
+    if (resolved !== path.resolve(DEFAULT_SERVER_ROOT)) {
+      return { success: false, message: `La raíz de almacenamiento del panel es ${DEFAULT_SERVER_ROOT}` };
+    }
     if (!this.isPathAllowed(resolved)) {
       return {
         success: false,
@@ -126,13 +129,9 @@ export class ConfigService {
     return this.config.rootPath;
   }
 
-  /**
-   * Root used by the general file explorer. It can intentionally be broader
-   * than the Minecraft root (for example /home/vm) while all Minecraft
-   * services continue using getRootPath().
-   */
+  /** The single persistent storage root visible to the manager. */
   public getFileExplorerRoot(): string {
-    const explorerRoot = path.resolve(DEFAULT_FILE_EXPLORER_ROOT);
+    const explorerRoot = path.resolve(process.env.FILE_EXPLORER_ROOT || DEFAULT_FILE_EXPLORER_ROOT);
     return this.isLexicallyAllowed(explorerRoot) ? explorerRoot : this.config.rootPath;
   }
 
@@ -226,7 +225,7 @@ export class ConfigService {
   }
 
   public getAllowedRoots(): string[] {
-    return (process.env.ALLOWED_ROOTS || '/data,/minecraft')
+    return (process.env.ALLOWED_ROOTS || '/data')
       .split(',')
       .map((entry) => entry.trim())
       .filter(Boolean)

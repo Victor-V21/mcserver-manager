@@ -20,16 +20,16 @@ slug: frontend-audit-and-microanimations
 
 | # | Heuristic | Score (0–4) | Findings & Opportunities |
 |---|---|:---:|---|
-| 1 | **Visibility of System Status** | 3.5 | Live telemetry (CPU, RAM, Disk, TPS, MSPT) is now real and responsive. Missing: smooth numerical/bar transitions when telemetry polls update every 3.5s. |
-| 2 | **Match Between System & Real World** | 4.0 | Terminology matches Minecraft/NeoForge conventions (.jar, MSPT/tick, ops, whitelist, RCON, user_jvm_args). |
+| 1 | **Visibility of System Status** | 3.5 | Live telemetry (CPU, RAM and Disk) is real and responsive; tick metrics clearly show when no sampler is installed. |
+| 2 | **Match Between System & Real World** | 4.0 | Terminology matches Minecraft/NeoForge conventions (.jar, MSPT/tick, ops, whitelist, user_jvm_args). |
 | 3 | **User Control & Freedom** | 3.0 | Added restart notification button in mod management; modals have escape/backdrop dismiss. Navigation lacks transition cues. |
 | 4 | **Consistency & Standards** | 3.5 | Cohesive dark gaming theme (`#070a0f`, emerald accents, JetBrains Mono font). Some buttons use ad-hoc styles instead of standard RareUI primitives. |
 | 5 | **Error Prevention** | 3.5 | Mod toggles and deletes have confirmation prompts; paths are validated in Settings. |
 | 6 | **Recognition Rather Than Recall** | 3.5 | Active version card, memory limits, and file paths are visible; Console has history shortcuts (`↑/↓`). |
-| 7 | **Flexibility & Efficiency of Use** | 3.0 | Console quick commands had `forge tps` instead of `neoforge tps` for 1.21.1 builds. Quick access tiles lacked dynamic hover indicators. |
+| 7 | **Flexibility & Efficiency of Use** | 3.0 | Quick access tiles expose the main management areas; tick metrics remain explicit when unavailable. |
 | 8 | **Aesthetic & Minimalist Design** | 3.5 | Clean glassmorphism layout. Missing: interactive micro-animations (cards, buttons, tabs, modal entrances). |
 | 9 | **Help Users Recognize & Recover from Errors** | 3.5 | Clear toast notifications and banner feedback on mod changes. |
-| 10 | **Help & Documentation** | 3.0 | Tooltips on badges and RCON quick commands; inline rule explanations in Properties and Players. |
+| 10 | **Help & Documentation** | 3.0 | Inline rule explanations in Properties and Players. |
 
 **Total Score**: **34 / 40** (85.0% · Very Good)
 

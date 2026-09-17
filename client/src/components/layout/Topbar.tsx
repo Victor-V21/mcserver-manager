@@ -30,7 +30,7 @@ export const Topbar: React.FC<TopbarProps> = ({
     players: { title: 'Jugadores & Permisos', subtitle: 'Administración de OPs, Whitelist y Bans' },
     mods: { title: 'Gestor de Mods', subtitle: 'Subida, activación y control de archivos .jar' },
     playit: { title: 'Túnel Playit.gg', subtitle: 'Estado del conector y dominios asignados' },
-    settings: { title: 'Ajustes del Panel', subtitle: 'Rutas dinámicas, RCON y seguridad' },
+    settings: { title: 'Ajustes del Panel', subtitle: 'Almacenamiento del contenedor y seguridad' },
   };
 
   const currentInfo = tabTitles[currentTab] || { title: 'Panel', subtitle: 'Administrador de Minecraft' };
@@ -81,11 +81,11 @@ export const Topbar: React.FC<TopbarProps> = ({
         )}
 
         {/* TPS Pill */}
-        {isOnline && telemetry?.tps && (
+        {isOnline && telemetry?.tps && telemetry.tps.current !== null && telemetry.tps.current !== undefined && (
           <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-emerald-300 text-xs font-mono">
             <RareTpsIcon size={15} />
             <span>{telemetry.tps.current} TPS</span>
-            {telemetry.tps.avgTickMs !== undefined && (
+            {telemetry.tps.avgTickMs !== undefined && telemetry.tps.avgTickMs !== null && (
               <span className="text-emerald-400/80 text-[11px] pl-0.5">({telemetry.tps.avgTickMs} ms)</span>
             )}
           </div>

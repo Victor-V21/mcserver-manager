@@ -10,6 +10,8 @@ import {
   Copy,
   Check,
   Terminal,
+  Save,
+  AlertCircle,
 } from 'lucide-react';
 
 export const PlayitView: React.FC = () => {
@@ -17,6 +19,12 @@ export const PlayitView: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [localPort, setLocalPort] = useState(25565);
+  const [configured, setConfigured] = useState(false);
+  const [secretPath, setSecretPath] = useState('');
+  const [binaryPath, setBinaryPath] = useState<string | null>(null);
+  const [configSaving, setConfigSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadPlayit();
@@ -25,10 +33,30 @@ export const PlayitView: React.FC = () => {
   const loadPlayit = async () => {
     setLoading(true);
     try {
-      const data = await api.getPlayitStatus();
+      const [data, config] = await Promise.all([api.getPlayitStatus(), api.getPlayitConfig()]);
       setStatus(data);
+      setLocalPort(config.localPort);
+      setConfigured(config.configured);
+      setSecretPath(config.secretPath);
+      setBinaryPath(config.binaryPath);
+      setError(data.lastError || null);
+    } catch (err: any) {
+      setError(err.message || 'No se pudo consultar Playit');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveConfig = async () => {
+    setConfigSaving(true);
+    try {
+      const result = await api.savePlayitConfig(localPort);
+      setLocalPort(result.localPort);
+      setError(null);
+    } catch (err: any) {
+      setError(err.message || 'No se pudo guardar el puerto local');
+    } finally {
+      setConfigSaving(false);
     }
   };
 
@@ -147,6 +175,45 @@ export const PlayitView: React.FC = () => {
             )}
           </div>
         </div>
+      </div>
+
+      {error && (
+        <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {/* Agent configuration stored with the container data */}
+      <div className="glass-panel rounded-2xl p-5 border border-slate-800 space-y-4">
+        <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-800">
+          <div>
+            <h3 className="text-sm font-bold text-white">Configuración del agente</h3>
+            <p className="text-xs text-slate-400 mt-1">La identidad y configuración de Playit se conservan dentro de /data/playit.</p>
+          </div>
+          <span className={`px-2 py-1 rounded-lg text-[10px] font-mono border ${configured ? 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10' : 'text-amber-300 border-amber-500/30 bg-amber-500/10'}`}>
+            {configured ? 'Agente vinculado' : 'Requiere vinculación'}
+          </span>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+          <label className="space-y-1 text-xs text-slate-400">
+            <span className="block">Puerto local de Minecraft</span>
+            <input
+              type="number"
+              min={1}
+              max={65535}
+              value={localPort}
+              onChange={(event) => setLocalPort(Number(event.target.value))}
+              className="w-full px-3 py-2 rounded-xl bg-dark-950 border border-slate-700 text-white font-mono focus:outline-none focus:border-cyan-500"
+            />
+          </label>
+          <div className="text-[11px] text-slate-500 font-mono break-all">Identidad: {secretPath || 'se genera al vincular Playit'}</div>
+          <GlassShimmerButton variant="cyan" size="sm" onClick={handleSaveConfig} disabled={configSaving}>
+            {configSaving ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+            <span>Guardar puerto</span>
+          </GlassShimmerButton>
+        </div>
+        <p className="text-[11px] text-slate-500 font-mono">Binario: {binaryPath || 'no encontrado en la imagen'}</p>
       </div>
 
       {/* Active Tunnel Details Cards */}

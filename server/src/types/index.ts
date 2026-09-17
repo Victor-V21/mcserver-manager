@@ -49,8 +49,8 @@ export interface ServerStatusResponse {
     serverSizeFormatted?: string;
   };
   tps: {
-    current: number;
-    avgTickMs?: number;
+    current: number | null;
+    avgTickMs?: number | null;
     history: number[];
   };
   players: {
@@ -84,14 +84,22 @@ export interface PlayitStatus {
   pid: number | null;
   tunnels: PlayitTunnel[];
   publicAddress?: string;
+  agentId?: string;
+  binaryPath?: string | null;
+  secretPath?: string;
+  localPort?: number;
+  lastError?: string | null;
   logs: string[];
 }
 
 export interface PlayitTunnel {
   id: string;
-  tunnelType: string;
+  name: string;
+  proto: 'tcp' | 'udp';
   publicAddress: string;
-  port: number;
+  assignedDomain: string;
+  publicPort: number;
+  localPort: number;
 }
 
 export interface McVersionManifest {

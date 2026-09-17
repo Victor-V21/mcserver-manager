@@ -4,13 +4,27 @@ import { PlayitService } from '../services/playit.service';
 const router = Router();
 const playitService = PlayitService.getInstance();
 
+// GET /api/playit/config
+router.get('/config', (_req: Request, res: Response) => {
+  res.json(playitService.getConfig());
+});
+
+// PUT /api/playit/config
+router.put('/config', (req: Request, res: Response) => {
+  try {
+    res.json(playitService.saveConfig(req.body || {}));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || 'No se pudo guardar la configuración de Playit' });
+  }
+});
+
 // GET /api/playit/status
 router.get('/status', (_req: Request, res: Response) => {
   try {
     const status = playitService.getStatus();
     res.json(status);
   } catch (err: any) {
-    res.json({ isRunning: false, pid: null, tunnels: [], logs: [] });
+    res.json({ isRunning: false, pid: null, tunnels: [], logs: [], lastError: err?.message || 'No se pudo leer Playit' });
   }
 });
 

@@ -535,9 +535,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* CPU */}
         <MetricGauge
           title="Uso de CPU"
-          value={isOnline ? `${telemetry?.cpu?.java ?? 0}%` : '0%'}
-          subtitle={`Host global: ${telemetry?.cpu?.host ?? 0}%`}
-          percentage={telemetry?.cpu?.java ?? 0}
+          value={isOnline && telemetry ? `${telemetry.cpu.java}%` : '--'}
+          subtitle={telemetry ? `Host global: ${telemetry.cpu.host}%` : 'Sin datos de telemetría'}
+          percentage={isOnline ? telemetry?.cpu?.java : undefined}
           icon={RareCpuIcon as any}
           variant="emerald"
         />
@@ -545,17 +545,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* RAM */}
         <MetricGauge
           title="Memoria RAM"
-          value={
-            isOnline && telemetry?.ram?.used
-              ? `${(telemetry.ram.used / 1024).toFixed(2)} GB`
-              : '0.00 GB'
-          }
-          subtitle={`Asignado: ${((telemetry?.ram?.maxAllocated || 4096) / 1024).toFixed(0)} GB • Host libre: ${(Math.max(0, (telemetry?.ram?.total || 8192) - (telemetry?.ram?.systemUsed || telemetry?.ram?.used || 0)) / 1024).toFixed(1)} GB`}
-          percentage={
-            telemetry?.ram?.used && telemetry?.ram?.maxAllocated
-              ? (telemetry.ram.used / telemetry.ram.maxAllocated) * 100
-              : 0
-          }
+          value={isOnline && telemetry ? `${(telemetry.ram.used / 1024).toFixed(2)} GB` : '--'}
+          subtitle={telemetry?.ram?.maxAllocated
+            ? `Asignado: ${(telemetry.ram.maxAllocated / 1024).toFixed(1)} GB • Host libre: ${Math.max(0, (telemetry.ram.total - (telemetry.ram.systemUsed || 0)) / 1024).toFixed(1)} GB`
+            : 'Xmx no especificado en la configuración'}
+          percentage={telemetry?.ram?.maxAllocated ? (telemetry.ram.used / telemetry.ram.maxAllocated) * 100 : undefined}
           icon={RareRamIcon as any}
           variant="cyan"
         />
@@ -563,14 +557,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* TPS */}
         <MetricGauge
           title="Rendimiento del Mundo"
-          value={isOnline ? `${telemetry?.tps?.current ?? 20.0} TPS` : '-- TPS'}
+          value={isOnline && telemetry?.tps?.current !== null && telemetry?.tps?.current !== undefined ? `${telemetry.tps.current} TPS` : '-- TPS'}
           subtitle={
-            isOnline
-              ? `Avg. Tick: ${telemetry?.tps?.avgTickMs !== undefined ? `${telemetry.tps.avgTickMs} ms` : '< 1.0 ms'} • Meta: 50 ms`
-              : 'Servidor apagado'
+            !isOnline
+              ? 'Servidor apagado'
+              : telemetry?.tps?.avgTickMs !== null && telemetry?.tps?.avgTickMs !== undefined
+                ? `Avg. Tick: ${telemetry.tps.avgTickMs} ms`
+                : 'No disponible sin un sampler de ticks instalado'
           }
           icon={RareTpsIcon as any}
-          variant={(telemetry?.tps?.current ?? 20) >= 19.0 ? 'emerald' : 'amber'}
+          variant={telemetry?.tps?.current !== null && telemetry?.tps?.current !== undefined && telemetry.tps.current >= 19.0 ? 'emerald' : 'amber'}
         />
 
         {/* Disk */}
@@ -592,7 +588,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* Connected Players Section */}
       <ConnectedPlayersList
         players={telemetry?.players?.list || []}
-        maxPlayers={telemetry?.players?.max || 20}
+        maxPlayers={telemetry?.players?.max ?? 0}
         onKick={onKickPlayer}
         onBan={onBanPlayer}
         onToggleOp={onToggleOp}

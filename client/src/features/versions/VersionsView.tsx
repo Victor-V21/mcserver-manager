@@ -95,7 +95,7 @@ export const VersionsView: React.FC = () => {
   const [installedInfo, setInstalledInfo] = useState<InstalledVersionInfo | null>(null);
   const [mcReleases, setMcReleases] = useState<MinecraftRelease[]>([]);
   const [loadingMc, setLoadingMc] = useState(false);
-  const [selectedVanillaVersion, setSelectedVanillaVersion] = useState('1.21.1');
+  const [selectedVanillaVersion, setSelectedVanillaVersion] = useState('');
   const [ramInitial, setRamInitial] = useState('4096M');
   const [ramMax, setRamMax] = useState('8192M');
   const [acceptEula, setAcceptEula] = useState(true);
@@ -312,7 +312,7 @@ export const VersionsView: React.FC = () => {
   }, [localNeoForge.versions, searchQuery]);
 
   const activeCompat = getCompatibilityInfo(
-    localNeoForge.detectedMinecraftVersion || installedInfo?.mcVersion || '1.21.1'
+    localNeoForge.detectedMinecraftVersion || installedInfo?.mcVersion || undefined
   );
 
   const tabs = [
@@ -402,7 +402,7 @@ export const VersionsView: React.FC = () => {
                   <>
                     <span className="text-lg font-bold text-white font-mono flex items-center gap-2">
                       <span className="text-emerald-400">
-                        Minecraft {localNeoForge.detectedMinecraftVersion || installedInfo?.mcVersion || '1.21.1'}
+                        Minecraft {localNeoForge.detectedMinecraftVersion || installedInfo?.mcVersion || 'Detectado'}
                       </span>
                       <span className="text-slate-500">•</span>
                       <span className="text-cyan-400">
@@ -430,7 +430,7 @@ export const VersionsView: React.FC = () => {
                 <div className="flex items-center gap-1.5">
                   <span className="text-slate-500">Directorio:</span>
                   <code className="text-emerald-300 bg-dark-950 px-2 py-0.5 rounded border border-slate-800">
-                    {localNeoForge.serverDir || installedInfo?.serverDir || '/home/vm/minecraft/server'}
+                    {localNeoForge.serverDir || installedInfo?.serverDir || '/data/server'}
                   </code>
                 </div>
 
@@ -481,7 +481,7 @@ export const VersionsView: React.FC = () => {
                 <div className="p-2.5 rounded-lg bg-dark-950/60 border border-slate-800/80">
                   <span className="text-slate-200 font-medium block">Runtime Java</span>
                   <span className="text-[11px] leading-relaxed text-slate-400">
-                    NeoForge 21.x para Minecraft 1.21.1 requiere <strong>OpenJDK 21 LTS</strong>.
+                    Las versiones recientes de NeoForge requieren <strong>OpenJDK 21 LTS</strong>.
                   </span>
                 </div>
                 <div className="p-2.5 rounded-lg bg-dark-950/60 border border-slate-800/80">
@@ -906,7 +906,7 @@ export const VersionsView: React.FC = () => {
 
                 <button
                   type="submit"
-                  disabled={installingVanilla}
+                  disabled={installingVanilla || !selectedVanillaVersion || !acceptEula}
                   className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all disabled:opacity-50 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
                 >
                   {installingVanilla ? 'Descargando Vanilla...' : `Instalar Vanilla ${selectedVanillaVersion}`}

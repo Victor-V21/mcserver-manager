@@ -3,6 +3,7 @@ import path from 'path';
 import { spawn } from 'child_process';
 import axios from 'axios';
 import { ConfigService } from './config.service';
+import { PropertiesService } from './properties.service';
 import { SUBDIRS } from '../config/constants';
 import { InstalledVersionInfo, McVersionManifest } from '../types';
 
@@ -57,22 +58,8 @@ export class VersionsService {
       );
       return res.data;
     } catch (err) {
-      console.warn('Could not fetch Mojang manifest, providing fallback releases:', err);
-      return {
-        latest: { release: '1.21.4', snapshot: '25w07a' },
-        versions: [
-          { id: '1.21.4', type: 'release', url: '', releaseTime: '2024-12-03' },
-          { id: '1.21.3', type: 'release', url: '', releaseTime: '2024-10-23' },
-          { id: '1.21.1', type: 'release', url: '', releaseTime: '2024-08-08' },
-          { id: '1.21', type: 'release', url: '', releaseTime: '2024-06-13' },
-          { id: '1.20.6', type: 'release', url: '', releaseTime: '2024-04-29' },
-          { id: '1.20.4', type: 'release', url: '', releaseTime: '2023-12-07' },
-          { id: '1.20.2', type: 'release', url: '', releaseTime: '2023-09-21' },
-          { id: '1.20.1', type: 'release', url: '', releaseTime: '2023-06-12' },
-          { id: '1.19.4', type: 'release', url: '', releaseTime: '2023-03-14' },
-          { id: '1.18.2', type: 'release', url: '', releaseTime: '2022-02-28' },
-        ],
-      };
+      console.warn('Could not fetch Mojang manifest:', err);
+      return { latest: { release: '', snapshot: '' }, versions: [] };
     }
   }
 
@@ -428,7 +415,7 @@ export class VersionsService {
     }
 
     const mcVersion = meta?.mcVersion || detection.mcVersion || undefined;
-    const loader = (meta?.loader || detection.loader || 'neoforge') as 'neoforge' | 'forge' | 'vanilla' | 'custom';
+    const loader = (meta?.loader || detection.loader || undefined) as 'neoforge' | 'forge' | 'vanilla' | 'custom' | undefined;
     const loaderVersion = meta?.loaderVersion || detection.loaderVersion || undefined;
 
     return {
@@ -436,9 +423,9 @@ export class VersionsService {
       mcVersion,
       loader,
       loaderVersion,
-      javaVersion: meta?.javaVersion || 'Java 21',
-      allocatedRamMin: meta?.ramMin || '4G',
-      allocatedRamMax: meta?.ramMax || '8G',
+      javaVersion: meta?.javaVersion || undefined,
+      allocatedRamMin: meta?.ramMin || undefined,
+      allocatedRamMax: meta?.ramMax || undefined,
       eulaAccepted: detection.eulaAccepted,
       serverJarFound: detection.serverJarFound,
       runScriptFound: detection.runScriptFound,
@@ -460,6 +447,7 @@ export class VersionsService {
 
     if (!fs.existsSync(serverDir)) fs.mkdirSync(serverDir, { recursive: true });
     if (!fs.existsSync(scriptsDir)) fs.mkdirSync(scriptsDir, { recursive: true });
+    PropertiesService.getInstance().ensurePropertiesFile();
 
     try {
       if (options.acceptEula) {
@@ -717,4 +705,3 @@ fi
     return { success: true, version };
   }
 }
-

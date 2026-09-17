@@ -49,7 +49,7 @@ export const QuickActionsModal: React.FC<QuickActionsModalProps> = ({
                 Confirmar {confirmAction === 'stop' ? 'Detención' : confirmAction === 'restart' ? 'Reinicio' : 'Apagado Forzado'}
               </h4>
               <p className="text-xs text-slate-300 mt-1">
-                {confirmAction === 'stop' && 'Se enviará el comando /stop mediante RCON para guardar el mundo de forma segura y desconectar a los jugadores.'}
+                {confirmAction === 'stop' && 'Se enviará el comando /stop a la consola del proceso para guardar el mundo de forma segura y desconectar a los jugadores.'}
                 {confirmAction === 'restart' && 'El servidor se detendrá de manera segura y volverá a iniciar el proceso Java.'}
                 {confirmAction === 'kill' && '¡ATENCIÓN! Se enviará SIGKILL directo al proceso. Podría provocar pérdida de chunks que no hayan sido guardados.'}
               </p>

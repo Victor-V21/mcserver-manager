@@ -84,7 +84,7 @@ export const ConsoleView: React.FC = () => {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-white tracking-wide">Consola Interactiva RCON</span>
+              <span className="text-xs font-bold text-white tracking-wide">Consola del Servidor</span>
               <span
                 className={`flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded-full ${
                   status === 'connected'
@@ -177,7 +177,7 @@ export const ConsoleView: React.FC = () => {
             value={command}
             onChange={(e) => setCommand(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Introduce un comando de Minecraft o RCON (ej: list, time set day, op Notch)..."
+            placeholder="Introduce un comando de Minecraft (ej: list, time set day, op Notch)..."
             className="w-full pl-8 pr-12 py-3 bg-dark-900 border border-slate-700/80 rounded-xl text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 font-mono shadow-inner"
           />
           <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">

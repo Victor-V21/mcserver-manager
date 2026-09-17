@@ -52,15 +52,22 @@ RUN cd server && npm ci --omit=dev
 COPY --from=server-builder /app/server/dist ./server/dist
 COPY --from=client-builder /app/client/dist ./client/dist
 
-# Default persistent server root directory
+# Default persistent server root directory. This is the only storage root
+# exposed to the application: Minecraft, NeoForge, mods, worlds, Playit and
+# panel settings live together in the named Docker volume.
 ENV PORT=3000 \
     NODE_ENV=production \
     SERVER_ROOT=/data \
-    PANEL_CONFIG_PATH=/data/panel-config.json
+    FILE_EXPLORER_ROOT=/data \
+    ALLOWED_ROOTS=/data \
+    PANEL_CONFIG_PATH=/data/panel-config.json \
+    MINECRAFT_AUTOSTART=true \
+    PLAYIT_AUTOSTART=false \
+    PLAYIT_LOCAL_PORT=25565
 
 RUN mkdir -p /data
 
-EXPOSE 3000
+EXPOSE 3000 25565
 
 VOLUME ["/data"]
 

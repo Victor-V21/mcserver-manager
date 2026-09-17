@@ -6,30 +6,22 @@ services:
     image: mcserver-manager:test
     container_name: mcserver-manager-test
     restart: "no"
-    user: "1000:1000"
     ports:
       - "127.0.0.1:3001:3000"
+      - "127.0.0.1:25566:25565"
     environment:
       PORT: 3000
       NODE_ENV: production
-      SERVER_ROOT: /home/vm/Projects/mcserver-manager/test
-      FILE_EXPLORER_ROOT: /home/vm
-      ALLOWED_ROOTS: /home/vm,/data
+      SERVER_ROOT: /data
+      FILE_EXPLORER_ROOT: /data
+      ALLOWED_ROOTS: /data
       PANEL_CONFIG_PATH: /data/panel-config.json
-      MC_CONTROL_MODE: external
-      MC_CONTROL_SOCKET: /run/mcmanager/control.sock
-      MC_SERVICE_NAME: minecraft-test.service
-      MC_CONTROL_TIMEOUT_MS: 5000
-      RCON_HOST: host.docker.internal
-      RCON_PORT: 25575
-      RCON_PASSWORD: mcmanager_secure_rcon
+      MINECRAFT_AUTOSTART: "false"
+      PLAYIT_AUTOSTART: "false"
+      PLAYIT_LOCAL_PORT: 25565
       MASTER_PASSWORD: test-password-change-me
       JWT_SECRET: test-jwt-secret-change-me
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     volumes:
-      # Simulate the real deployment: the whole host home is bind-mounted,
-      # while the Minecraft service itself remains a host systemd service.
-      - /home/vm:/home/vm:rw
-      - ./test-manager-data:/data:rw
-      - /run/user/1000/mcmanager-test:/run/mcmanager:rw
+      # The fixture is copied into the container's persistent data root for
+      # this local test. Production uses the named mcserver-data volume above.
+      - ./test:/data:rw

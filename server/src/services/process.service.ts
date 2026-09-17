@@ -2,230 +2,160 @@ import fs from 'fs';
 import path from 'path';
 import { spawn, ChildProcess } from 'child_process';
 import { ConfigService } from './config.service';
-import { RconService } from './rcon.service';
+import { PropertiesService } from './properties.service';
 import { SUBDIRS } from '../config/constants';
 import modErrors from '../data/mod-errors.json';
 import { CrashDiagnostic } from '../types';
-import { HostControlService, HostControlStatus } from './host-control.service';
 
+type ProcessState = 'online' | 'offline' | 'starting' | 'stopping';
+
+/** Owns the Minecraft process running in the same container as the panel. */
 export class ProcessService {
   private static instance: ProcessService;
   private configService: ConfigService;
-  private rconService: RconService;
-  private hostControlService: HostControlService;
   private serverProcess: ChildProcess | null = null;
-  private serverStatus: 'online' | 'offline' | 'starting' | 'stopping' = 'offline';
+  private serverStatus: ProcessState = 'offline';
   private startTime: number | null = null;
-  private isUserStopping: boolean = false;
+  private isUserStopping = false;
   private lastCrashDiagnostic: CrashDiagnostic | null = null;
   private modErrorPatterns: any[] = modErrors;
-  private logBuffer: string = '';
+  private logBuffer = '';
 
   private constructor() {
     this.configService = ConfigService.getInstance();
-    this.rconService = RconService.getInstance();
-    this.hostControlService = new HostControlService();
   }
 
-  private parseLogForErrors(str?: string) {
-    if (str) {
-      this.logBuffer += str;
-      if (this.logBuffer.length > 32768) {
-        this.logBuffer = this.logBuffer.slice(-32768);
-      }
+  public static getInstance(): ProcessService {
+    if (!ProcessService.instance) ProcessService.instance = new ProcessService();
+    return ProcessService.instance;
+  }
+
+  private parseLogForErrors(chunk?: string): void {
+    if (chunk) {
+      this.logBuffer += chunk;
+      if (this.logBuffer.length > 32768) this.logBuffer = this.logBuffer.slice(-32768);
     }
 
-    const textToScan = str || this.logBuffer;
-
-    // 1. Check for missing dependencies / loading failures pattern
     const reqRegex = /Mod\s+([a-zA-Z0-9_-]+)\s+requires\s+([a-zA-Z0-9_-]+)\s+([0-9a-zA-Z.-]+(?:\s+or\s+above[^\n\r]*)?)/gi;
     const culpritMods = new Set<string>();
     const missingDeps = new Set<string>();
     const details: string[] = [];
+    let match: RegExpExecArray | null;
 
-    let match;
-    while ((match = reqRegex.exec(textToScan)) !== null) {
+    while ((match = reqRegex.exec(this.logBuffer)) !== null) {
       const mod = match[1];
-      const dep = match[2];
-      const ver = match[3].replace(/\s+or\s+above/i, '+').trim();
-
+      const dependency = match[2];
+      const version = match[3].replace(/\s+or\s+above/i, '+').trim();
       culpritMods.add(mod);
-      missingDeps.add(`${dep} ${ver}`);
-      const detailMsg = `Mod '${mod}' requiere la librería '${dep}' (${ver})`;
-      if (!details.includes(detailMsg)) {
-        details.push(detailMsg);
-      }
+      missingDeps.add(`${dependency} ${version}`);
+      details.push(`Mod '${mod}' requiere la librería '${dependency}' (${version})`);
     }
 
     if (culpritMods.size > 0) {
       this.lastCrashDiagnostic = {
         modName: Array.from(culpritMods).join(', '),
         missingDependencies: Array.from(missingDeps),
-        error: 'El servidor no pudo iniciar debido a que faltan librerías y dependencias requeridas por los mods instalados.',
-        solution: `Instala las dependencias requeridas (${Array.from(missingDeps).slice(0, 4).join(', ')}) en la carpeta de mods o desactiva temporalmente los mods que las solicitan.`,
-        details: details.slice(0, 8),
+        error: 'El servidor no pudo iniciar debido a dependencias faltantes de los mods instalados.',
+        solution: `Instala las dependencias requeridas (${Array.from(missingDeps).slice(0, 4).join(', ')}) en server/mods o desactiva los mods que las solicitan.`,
+        details: [...new Set(details)].slice(0, 8),
         severity: 'error',
       };
       return;
     }
 
-    if (this.lastCrashDiagnostic) return; // Ya tenemos un error detectado
-
+    if (this.lastCrashDiagnostic) return;
     for (const rule of this.modErrorPatterns) {
-      const patternRegex = new RegExp(rule.pattern, 'i');
-      const errorMatch = patternRegex.exec(this.logBuffer);
-      
-      if (errorMatch) {
-        const logAfterError = this.logBuffer.slice(errorMatch.index);
-        const modRegex = new RegExp(rule.modRegex, 'ig');
-        const matches = [...logAfterError.matchAll(modRegex)];
-        
-        if (matches.length > 0) {
-          let modNames = [];
-          let version = '';
-          
-          for (const match of matches) {
-            let name = 'Desconocido';
-            for (let i = 1; i < match.length; i++) {
-              if (match[i]) {
-                name = match[i];
-                if ((rule.pattern.includes('Missing') || rule.pattern.includes('ModLoadingException')) && i === 1 && match[2]) {
-                   version = match[2];
-                }
-                break;
-              }
+      const errorMatch = new RegExp(rule.pattern, 'i').exec(this.logBuffer);
+      if (!errorMatch) continue;
+      const logAfterError = this.logBuffer.slice(errorMatch.index);
+      const matches = [...logAfterError.matchAll(new RegExp(rule.modRegex, 'ig'))];
+      if (matches.length === 0) continue;
+
+      let version = '';
+      const modNames = matches.map((modMatch) => {
+        let name = 'Desconocido';
+        for (let i = 1; i < modMatch.length; i += 1) {
+          if (modMatch[i]) {
+            name = modMatch[i];
+            if ((rule.pattern.includes('Missing') || rule.pattern.includes('ModLoadingException')) && i === 1 && modMatch[2]) {
+              version = modMatch[2];
             }
-            name = name.replace(/(_service|\.jar)$/i, '').split('@')[0];
-            modNames.push(name);
+            break;
           }
-          
-          const uniqueModNames = [...new Set(modNames)];
-          const modName = uniqueModNames.join(',');
-          
-          let solution = rule.solution;
-          if (version) {
-            solution = solution.replace('$VERSION', version);
-          } else {
-            solution = solution.replace('$VERSION', 'específica');
-          }
-
-          this.lastCrashDiagnostic = {
-            modName,
-            error: rule.pattern,
-            solution,
-            severity: rule.severity || 'error',
-          } as any;
-          
-          break;
         }
-      }
-    }
-  }
+        return name.replace(/(_service|\.jar)$/i, '').split('@')[0];
+      });
 
-  public static getInstance(): ProcessService {
-    if (!ProcessService.instance) {
-      ProcessService.instance = new ProcessService();
+      this.lastCrashDiagnostic = {
+        modName: [...new Set(modNames)].join(','),
+        error: rule.pattern,
+        solution: rule.solution.replace('$VERSION', version || 'específica'),
+        severity: rule.severity || 'error',
+      } as CrashDiagnostic;
+      return;
     }
-    return ProcessService.instance;
   }
 
   public async getStatus(): Promise<{
     isRunning: boolean;
     pid: number | null;
-    status: 'online' | 'offline' | 'starting' | 'stopping';
+    status: ProcessState;
     uptime: number;
     crashDiagnostic?: CrashDiagnostic | null;
-    controlError?: string;
     cpuPercent?: number;
     memoryBytes?: number;
   }> {
-    if (this.hostControlService.isExternal()) {
-      try {
-        const hostStatus = await this.hostControlService.getStatus();
-        return this.mapHostStatus(hostStatus);
-      } catch (error: any) {
-        return {
-          isRunning: false,
-          pid: null,
-          status: 'offline',
-          uptime: 0,
-          crashDiagnostic: this.lastCrashDiagnostic,
-          controlError: error.message || 'Host control bridge unavailable',
-        };
-      }
-    }
-
     const isRunning = this.serverProcess !== null && !this.serverProcess.killed;
-    const uptime = isRunning && this.startTime ? Math.floor((Date.now() - this.startTime) / 1000) : 0;
     return {
       isRunning,
-      pid: this.serverProcess ? this.serverProcess.pid || null : null,
+      pid: this.serverProcess?.pid || null,
       status: this.serverStatus,
-      uptime,
+      uptime: isRunning && this.startTime ? Math.floor((Date.now() - this.startTime) / 1000) : 0,
       crashDiagnostic: this.lastCrashDiagnostic,
-    };
-  }
-
-  private mapHostStatus(hostStatus: HostControlStatus): {
-    isRunning: boolean;
-    pid: number | null;
-    status: 'online' | 'offline' | 'starting' | 'stopping';
-    uptime: number;
-    crashDiagnostic?: CrashDiagnostic | null;
-    controlError?: string;
-    cpuPercent?: number;
-    memoryBytes?: number;
-  } {
-    let status: 'online' | 'offline' | 'starting' | 'stopping' = 'offline';
-    if (hostStatus.activeState === 'active') status = 'online';
-    else if (hostStatus.activeState === 'activating') status = 'starting';
-    else if (hostStatus.activeState === 'deactivating') status = 'stopping';
-
-    return {
-      isRunning: status !== 'offline',
-      pid: hostStatus.mainPid,
-      status,
-      uptime: hostStatus.uptime,
-      crashDiagnostic: this.lastCrashDiagnostic,
-      cpuPercent: hostStatus.cpuPercent,
-      memoryBytes: hostStatus.memoryBytes,
     };
   }
 
   public async start(): Promise<{ success: boolean; message: string }> {
-    if (this.hostControlService.isExternal()) {
-      return this.hostControlService.execute('start');
-    }
-
     if (this.serverProcess && !this.serverProcess.killed) {
-      return { success: false, message: 'Server is already running' };
+      return { success: false, message: 'El servidor ya está ejecutándose' };
     }
 
     const root = this.configService.getRootPath();
     const serverDir = this.configService.getServerDir();
-    const startScript = path.join(root, SUBDIRS.START_SCRIPT);
-    const runSh = path.join(serverDir, 'run.sh');
+    const serverRunScript = path.join(serverDir, 'run.sh');
+    const serverStartScript = path.join(serverDir, 'start.sh');
+    const managerStartScript = path.join(root, SUBDIRS.START_SCRIPT);
     const serverJar = path.join(serverDir, 'server.jar');
 
-    let command = '';
-    let args: string[] = [];
+    let command: string;
+    let args: string[];
     let cwd = serverDir;
 
-    if (fs.existsSync(startScript)) {
+    // NeoForge's scripts are relative to the server directory and are the
+    // most reliable source of the selected loader, JVM args and mods.
+    if (fs.existsSync(serverRunScript)) {
       command = '/bin/bash';
-      args = [startScript];
-      cwd = path.dirname(startScript);
-    } else if (fs.existsSync(runSh)) {
+      args = [serverRunScript, 'nogui'];
+    } else if (fs.existsSync(serverStartScript)) {
       command = '/bin/bash';
-      args = [runSh, 'nogui'];
-      cwd = serverDir;
+      args = [serverStartScript, 'nogui'];
+    } else if (fs.existsSync(managerStartScript)) {
+      command = '/bin/bash';
+      args = [managerStartScript, 'nogui'];
+      cwd = path.dirname(managerStartScript);
     } else if (fs.existsSync(serverJar)) {
       command = 'java';
-      args = ['-Xms4G', '-Xmx8G', '-jar', 'server.jar', 'nogui'];
-      cwd = serverDir;
+      const userJvmArgs = path.join(serverDir, 'user_jvm_args.txt');
+      args = fs.existsSync(userJvmArgs)
+        ? [`@${userJvmArgs}`, '-jar', 'server.jar', 'nogui']
+        : ['-jar', 'server.jar', 'nogui'];
     } else {
-      throw new Error('No executable server found. Please install a Minecraft version first.');
+      throw new Error('No se encontró un servidor ejecutable. Instala una versión de Minecraft primero.');
     }
+
+    // Create the initial configuration before the first boot so a new server
+    // starts with the panel's explicit offline-mode policy.
+    PropertiesService.getInstance().ensurePropertiesFile();
 
     this.isUserStopping = false;
     this.serverStatus = 'starting';
@@ -233,11 +163,9 @@ export class ProcessService {
     this.lastCrashDiagnostic = null;
     this.logBuffer = '';
 
-    // Ensure logs directory exists
     const logsDir = path.join(serverDir, 'logs');
-    if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
-    const logFile = path.join(logsDir, 'latest.log');
-    const logStream = fs.createWriteStream(logFile, { flags: 'a' });
+    fs.mkdirSync(logsDir, { recursive: true });
+    const logStream = fs.createWriteStream(path.join(logsDir, 'latest.log'), { flags: 'a' });
 
     try {
       const child = spawn(command, args, {
@@ -245,177 +173,110 @@ export class ProcessService {
         env: { ...process.env },
         stdio: ['pipe', 'pipe', 'pipe'],
       });
-
       this.serverProcess = child;
 
-      child.stdout.on('data', (chunk) => {
-        logStream.write(chunk);
-        const str = chunk.toString();
-        this.parseLogForErrors(str);
-        if (str.includes('Done (') || str.includes('! For help, type "help"') || str.includes('Server started')) {
+      const handleOutput = (chunk: Buffer | string) => {
+        const text = chunk.toString();
+        logStream.write(text);
+        this.parseLogForErrors(text);
+        if (text.includes('Done (') || text.includes('For help, type') || text.includes('Server started')) {
           this.serverStatus = 'online';
-          this.lastCrashDiagnostic = null; // Clean if successfully started
+          this.lastCrashDiagnostic = null;
         }
-      });
+      };
 
-      child.stderr.on('data', (chunk) => {
-        logStream.write(chunk);
-        const str = chunk.toString();
-        this.parseLogForErrors(str);
-      });
-
+      child.stdout?.on('data', handleOutput);
+      child.stderr?.on('data', handleOutput);
       child.on('close', async (code) => {
-        console.log(`[ProcessService] Server process exited with code ${code} (previous status: ${this.serverStatus})`);
         const wasStarting = this.serverStatus === 'starting';
         const hadDiagnostic = this.lastCrashDiagnostic !== null;
         const wasUserStopping = this.isUserStopping;
-
         this.serverProcess = null;
         this.serverStatus = 'offline';
         this.startTime = null;
         this.isUserStopping = false;
-        this.rconService.disconnect();
+        logStream.end();
 
         const config = this.configService.getConfig();
-        const isCrashOrAbnormal = !wasUserStopping && (wasStarting || hadDiagnostic || code !== 0);
+        const abnormalExit = !wasUserStopping && (wasStarting || hadDiagnostic || code !== 0);
+        if (!config.aiDiagnosticEnabled || !abnormalExit) return;
 
-        if (config.aiDiagnosticEnabled && isCrashOrAbnormal) {
-          console.log(`[ProcessService] Triggering AI Crash Analysis (code=${code}, wasStarting=${wasStarting}, hadDiagnostic=${hadDiagnostic})...`);
-          const fallbackResult = this.lastCrashDiagnostic; // Save regex result
-          try {
-            const { AiService } = await import('./ai.service');
-            const { ModsService } = await import('./mods.service');
-            const aiService = AiService.getInstance();
-            const modsService = ModsService.getInstance();
-            const mods = modsService.listMods().map(m => m.filename);
-
-            this.lastCrashDiagnostic = {
-              modName: 'Analizando con IA...',
-              error: 'Esperando respuesta de Gemini',
-              solution: 'Leyendo logs del servidor con IA...',
-              severity: 'warning'
-            };
-
-            const crashContext = this.getCrashContext();
-            console.log(`[ProcessService] Sending rich crash context to AI (crashReport: ${Boolean(crashContext.crashReport)}, mods: ${crashContext.mods.length})...`);
-            const aiResult = await aiService.analyzeCrash(crashContext);
-            if (aiResult) {
-              console.log('[ProcessService] AI Diagnosis successfully updated:', aiResult.modName);
-              this.lastCrashDiagnostic = aiResult;
-            } else {
-              console.log('[ProcessService] AI returned null, retaining fallback diagnostic.');
-              this.lastCrashDiagnostic = fallbackResult;
-            }
-          } catch (e) {
-            console.error("[ProcessService] AI crash analysis exception:", e);
-            this.lastCrashDiagnostic = fallbackResult;
-          }
+        const fallbackResult = this.lastCrashDiagnostic;
+        try {
+          const { AiService } = await import('./ai.service');
+          const { ModsService } = await import('./mods.service');
+          const mods = ModsService.getInstance().listMods().map((mod) => mod.filename);
+          this.lastCrashDiagnostic = {
+            modName: 'Analizando con IA...',
+            error: 'Esperando respuesta del diagnóstico',
+            solution: 'Leyendo los registros del servidor...',
+            severity: 'warning',
+          };
+          const result = await AiService.getInstance().analyzeCrash({ ...this.getCrashContext(), mods });
+          this.lastCrashDiagnostic = result || fallbackResult;
+        } catch (error) {
+          console.error('[ProcessService] Error en diagnóstico de crash:', error);
+          this.lastCrashDiagnostic = fallbackResult;
         }
       });
-
-      child.on('error', (err) => {
-        console.error('Failed to start server process:', err);
+      child.on('error', (error) => {
+        console.error('[ProcessService] No se pudo iniciar Minecraft:', error);
         this.serverProcess = null;
         this.serverStatus = 'offline';
         this.startTime = null;
+        logStream.end();
       });
 
-      return { success: true, message: 'Server started successfully' };
-    } catch (err: any) {
+      return { success: true, message: 'Servidor Minecraft iniciado' };
+    } catch (error: any) {
+      logStream.end();
       this.serverStatus = 'offline';
       this.startTime = null;
-      throw new Error(`Failed to spawn server process: ${err.message}`);
+      throw new Error(`No se pudo iniciar el proceso de Minecraft: ${error.message}`);
     }
   }
 
   public async stop(): Promise<{ success: boolean; message: string }> {
-    if (this.hostControlService.isExternal()) {
-      return this.hostControlService.execute('stop');
-    }
-
     if (!this.serverProcess || this.serverProcess.killed) {
       this.serverStatus = 'offline';
-      return { success: false, message: 'Server is not running' };
+      return { success: false, message: 'El servidor no está ejecutándose' };
     }
 
     this.isUserStopping = true;
     this.serverStatus = 'stopping';
+    this.sendCommand('stop');
+    if (await this.waitForExit(25000)) return { success: true, message: 'Servidor detenido correctamente' };
 
-    // 1. Try graceful RCON /stop
-    try {
-      if (this.rconService.isConnected()) {
-        await this.rconService.sendCommand('/stop');
-      } else {
-        // write to stdin if attached
-        if (this.serverProcess.stdin && !this.serverProcess.stdin.destroyed) {
-          this.serverProcess.stdin.write('stop\n');
-        }
-      }
-    } catch (err) {
-      console.warn('Could not send /stop command, proceeding with process signal:', err);
-    }
-
-    // 2. Wait up to 25s for graceful shutdown
-    const exited = await this.waitForExit(25000);
-    if (exited) {
-      this.serverStatus = 'offline';
-      this.serverProcess = null;
-      return { success: true, message: 'Server stopped cleanly' };
-    }
-
-    // 3. SIGTERM fallback
-    console.warn('Server did not stop cleanly, sending SIGTERM...');
-    if (this.serverProcess && !this.serverProcess.killed) {
-      this.serverProcess.kill('SIGTERM');
-    }
-
-    const termExited = await this.waitForExit(5000);
-    if (termExited) {
-      this.serverStatus = 'offline';
-      this.serverProcess = null;
-      return { success: true, message: 'Server terminated with SIGTERM' };
-    }
-
-    // 4. Force SIGKILL
+    console.warn('[ProcessService] Minecraft no respondió a stop; enviando SIGTERM');
+    this.serverProcess?.kill('SIGTERM');
+    if (await this.waitForExit(5000)) return { success: true, message: 'Servidor detenido con SIGTERM' };
     return this.kill();
   }
 
   public async restart(): Promise<{ success: boolean; message: string }> {
-    if (this.hostControlService.isExternal()) {
-      return this.hostControlService.execute('restart');
-    }
-
-    if (this.serverProcess && !this.serverProcess.killed) {
-      await this.stop();
-    }
-    // Wait a brief 2 seconds for ports to release
-    await new Promise((r) => setTimeout(r, 2000));
+    if (this.serverProcess && !this.serverProcess.killed) await this.stop();
+    await new Promise((resolve) => setTimeout(resolve, 1000));
     return this.start();
   }
 
   public async kill(): Promise<{ success: boolean; message: string }> {
-    if (this.hostControlService.isExternal()) {
-      return this.hostControlService.execute('kill');
-    }
-
-    if (this.serverProcess && !this.serverProcess.killed) {
-      this.serverProcess.kill('SIGKILL');
-      this.serverProcess = null;
-    }
+    this.isUserStopping = true;
+    if (this.serverProcess && !this.serverProcess.killed) this.serverProcess.kill('SIGKILL');
+    this.serverProcess = null;
     this.serverStatus = 'offline';
     this.startTime = null;
-    this.rconService.disconnect();
-    return { success: true, message: 'Server process killed immediately' };
+    return { success: true, message: 'Proceso de Minecraft finalizado inmediatamente' };
   }
 
-  public sendStdinCommand(cmd: string): boolean {
-    if (this.hostControlService.isExternal()) return false;
+  public sendCommand(command: string): boolean {
+    const cleanCommand = command.replace(/[\r\n]/g, ' ').trim().replace(/^\/+/, '');
+    if (!cleanCommand || !this.serverProcess?.stdin || this.serverProcess.stdin.destroyed) return false;
+    this.serverProcess.stdin.write(`${cleanCommand}\n`);
+    return true;
+  }
 
-    if (this.serverProcess && this.serverProcess.stdin && !this.serverProcess.stdin.destroyed) {
-      this.serverProcess.stdin.write(`${cmd}\n`);
-      return true;
-    }
-    return false;
+  public async shutdown(): Promise<void> {
+    if (this.serverProcess && !this.serverProcess.killed) await this.stop();
   }
 
   public getCrashContext(): {
@@ -430,68 +291,48 @@ export class ProcessService {
     const serverDir = this.configService.getServerDir();
     const logsDir = path.join(serverDir, 'logs');
     const crashReportsDir = path.join(serverDir, 'crash-reports');
-
-    // 1. Crash report file check
     let crashReport = '';
-    if (fs.existsSync(crashReportsDir)) {
-      try {
-        const files = fs.readdirSync(crashReportsDir)
-          .filter(f => f.startsWith('crash-') && f.endsWith('.txt'))
-          .map(f => ({ name: f, time: fs.statSync(path.join(crashReportsDir, f)).mtimeMs }))
-          .sort((a, b) => b.time - a.time);
-        if (files.length > 0 && Date.now() - files[0].time < 48 * 60 * 60 * 1000) {
-          crashReport = fs.readFileSync(path.join(crashReportsDir, files[0].name), 'utf8');
+
+    try {
+      if (fs.existsSync(crashReportsDir)) {
+        const latest = fs.readdirSync(crashReportsDir)
+          .filter((file) => file.startsWith('crash-') && file.endsWith('.txt'))
+          .map((file) => ({ file, time: fs.statSync(path.join(crashReportsDir, file)).mtimeMs }))
+          .sort((a, b) => b.time - a.time)[0];
+        if (latest && Date.now() - latest.time < 48 * 60 * 60 * 1000) {
+          crashReport = fs.readFileSync(path.join(crashReportsDir, latest.file), 'utf8');
         }
-      } catch (err) {
-        console.warn('[ProcessService] Could not read crash-reports:', err);
       }
+    } catch (error) {
+      console.warn('[ProcessService] No se pudo leer el crash report:', error);
     }
 
-    // 2. Logs from disk or buffer
     let logs = this.logBuffer;
-    const logFile = path.join(logsDir, 'latest.log');
-    if (fs.existsSync(logFile)) {
-      try {
-        const diskLog = fs.readFileSync(logFile, 'utf8');
-        if (diskLog && diskLog.length > 0) {
-          logs = diskLog;
-        }
-      } catch {}
-    }
+    try {
+      const latestLog = path.join(logsDir, 'latest.log');
+      if (fs.existsSync(latestLog)) logs = fs.readFileSync(latestLog, 'utf8') || logs;
+    } catch {}
 
-    // 3. Mods list
     let mods: string[] = [];
     try {
       const modsDir = path.join(serverDir, 'mods');
-      if (fs.existsSync(modsDir)) {
-        mods = fs.readdirSync(modsDir).filter(f => f.endsWith('.jar') || f.endsWith('.disabled'));
-      }
+      if (fs.existsSync(modsDir)) mods = fs.readdirSync(modsDir).filter((file) => /\.(jar|disabled)$/i.test(file));
     } catch {}
 
-    // 4. Version info
-    let mcVersion = '1.21.1';
-    let loader = 'neoforge';
-    let loaderVersion = '';
-    let javaVersion = 'Java 21';
+    let versionInfo: any = {};
     try {
       const { VersionsService } = require('./versions.service');
-      const verInfo = VersionsService.getInstance().getInstalledVersion();
-      if (verInfo) {
-        if (verInfo.mcVersion) mcVersion = verInfo.mcVersion;
-        if (verInfo.loader) loader = verInfo.loader;
-        if (verInfo.loaderVersion) loaderVersion = verInfo.loaderVersion;
-        if (verInfo.javaVersion) javaVersion = verInfo.javaVersion;
-      }
+      versionInfo = VersionsService.getInstance().getInstalledVersion() || {};
     } catch {}
 
     return {
       logs,
       mods,
       crashReport,
-      mcVersion,
-      loader,
-      loaderVersion,
-      javaVersion,
+      mcVersion: versionInfo.mcVersion || undefined,
+      loader: versionInfo.loader || undefined,
+      loaderVersion: versionInfo.loaderVersion || undefined,
+      javaVersion: versionInfo.javaVersion || undefined,
     };
   }
 
@@ -502,46 +343,31 @@ export class ProcessService {
     }
 
     const { AiService } = await import('./ai.service');
-    const aiService = AiService.getInstance();
-
     this.lastCrashDiagnostic = {
       modName: 'Analizando con IA...',
-      error: 'Esperando respuesta de Gemini',
-      solution: 'Leyendo logs del servidor con IA...',
-      severity: 'warning'
+      error: 'Esperando respuesta del diagnóstico',
+      solution: 'Leyendo los registros del servidor...',
+      severity: 'warning',
     };
-
-    const crashContext = this.getCrashContext();
-    const aiResult = await aiService.analyzeCrash(crashContext);
-    if (aiResult) {
-      this.lastCrashDiagnostic = aiResult;
-      return { success: true, diagnostic: aiResult };
-    } else {
-      // Fallback to our enhanced parser so user is never left with an empty or ambiguous diagnostic
-      this.lastCrashDiagnostic = null;
-      this.parseLogForErrors(crashContext.crashReport || crashContext.logs);
-      if (this.lastCrashDiagnostic) {
-        return { 
-          success: true, 
-          diagnostic: this.lastCrashDiagnostic, 
-          message: 'Diagnóstico contextual generado exitosamente (Gemini experimenta alta demanda 503)' 
-        };
-      }
-      return { 
-        success: false, 
-        diagnostic: null, 
-        message: 'No se pudo generar el diagnóstico en este momento' 
-      };
+    const context = this.getCrashContext();
+    const result = await AiService.getInstance().analyzeCrash(context);
+    if (result) {
+      this.lastCrashDiagnostic = result;
+      return { success: true, diagnostic: result };
     }
+
+    this.lastCrashDiagnostic = null;
+    this.parseLogForErrors(context.crashReport || context.logs);
+    return this.lastCrashDiagnostic
+      ? { success: true, diagnostic: this.lastCrashDiagnostic, message: 'Diagnóstico local generado desde los registros' }
+      : { success: false, diagnostic: null, message: 'No se pudo generar el diagnóstico en este momento' };
   }
 
   private async waitForExit(timeoutMs: number): Promise<boolean> {
-    const start = Date.now();
-    while (Date.now() - start < timeoutMs) {
-      if (!this.serverProcess || this.serverProcess.killed) {
-        return true;
-      }
-      await new Promise((r) => setTimeout(r, 500));
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < timeoutMs) {
+      if (!this.serverProcess || this.serverProcess.killed) return true;
+      await new Promise((resolve) => setTimeout(resolve, 500));
     }
     return false;
   }

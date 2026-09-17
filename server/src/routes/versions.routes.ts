@@ -11,12 +11,12 @@ const versionsService = VersionsService.getInstance();
 
 // GET /api/versions/manifest
 router.get('/manifest', async (req: Request, res: Response) => {
-  const mcVersion = (req.query.mcVersion as string) || '1.21.1';
+  const mcVersion = req.query.mcVersion as string | undefined;
 
   try {
     const [manifest, neoforgeVersions] = await Promise.all([
       versionsService.getMinecraftManifest(),
-      versionsService.getNeoForgeVersions(mcVersion),
+      mcVersion ? versionsService.getNeoForgeVersions(mcVersion) : Promise.resolve([]),
     ]);
 
     const releasesOnly = manifest.versions
@@ -46,7 +46,11 @@ router.get('/minecraft', async (_req: Request, res: Response) => {
 
 // GET /api/versions/loaders?type=neoforge&mcVersion=1.21.1
 router.get('/loaders', async (req: Request, res: Response) => {
-  const mcVersion = (req.query.mcVersion as string) || '1.21.1';
+  const mcVersion = req.query.mcVersion as string | undefined;
+  if (!mcVersion) {
+    res.status(400).json({ error: 'mcVersion is required' });
+    return;
+  }
 
   try {
     const rawVersions = await versionsService.getNeoForgeVersions(mcVersion);
@@ -67,7 +71,7 @@ const getCurrentHandler = (_req: Request, res: Response) => {
     const current = versionsService.getInstalledVersion();
     res.json({
       isInstalled: current.installed,
-      serverType: current.loader || 'neoforge',
+      serverType: current.loader || 'unknown',
       mcVersion: current.mcVersion || null,
       loaderVersion: current.loaderVersion || null,
       javaVersion: current.javaVersion || null,

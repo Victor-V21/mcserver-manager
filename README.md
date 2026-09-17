@@ -1,239 +1,93 @@
-# MCServer Manager 🎮🚀
+# MCServer Manager
 
-Plataforma web de administración integral para servidores de Minecraft (NeoForge, Forge, Fabric y Vanilla) y túneles Playit.gg, con arquitectura de grado de producción, cero mocks, diagnóstico de crashes asistido por Inteligencia Artificial (Google Gemini), componentes micro-animados de **RareUI**, y empaquetado en un único contenedor Docker compatible con **Dokploy** y **Cloudflare Tunnel**.
+Panel web para instalar y administrar un servidor Minecraft/NeoForge, sus mods, mundos, configuraciones y el agente Playit desde un único contenedor Docker.
 
----
+## Arquitectura
 
-## ✨ Características Principales
-
-### 🧠 Diagnóstico Inteligente de Errores y Crasheos con IA (Google Gemini)
-- **Análisis Universal de Causas:** No se limita a dependencias de mods; analiza con objetividad médica fallos de memoria RAM (`OutOfMemoryError`), puertos ocupados (`BindException`), incompatibilidades de versión de Java, EULA no aceptada (`eula=false`), mods de cliente instalados por error en servidor dedicado, corrupción de chunks/mundos (`RegionFile`, NBT) y errores de sintaxis en archivos `.properties`, `.toml` o `.json`.
-- **Inyección de Contexto Real:** Lee directamente los reportes oficiales de crash de Minecraft (`crash-reports/crash-*.txt`), la lista de archivos `.jar` instalados, la versión de Minecraft, el loader y los registros recientes de consola.
-- **Desglose Estructurado en el Dashboard:**
-  - 🏷️ **Librerías / Dependencias requeridas:** Etiquetas distintivas en cian con sus versiones mínimas requeridas (`Create 0.6.10+`, `Sable 2.0.0+`, etc.).
-  - 📦 **Mod(s) instalados o Componente afectado:** Identificación clara entre archivos instalados en conflicto o componentes del sistema (Memoria, Red, Java, Mundo).
-  - 📋 **Desglose técnico por mod:** Viñetas detalladas que explican qué archivo específico solicita cuál librería.
-  - 💡 **Solución paso a paso en español:** Instrucciones accionables con botones de navegación contextual (Gestionar Mods, Ver Consola, Actualizar Loader).
-- **Banner Animado con Cronómetro:** Indicador futurista en tiempo real con cronómetro en vivo (`⏱️ 00:04s`), haz de escaneo y halo giratorio mientras se consulta el modelo.
-- **Resiliencia y Alta Disponibilidad:**
-  - Latencia ultrarrápida configurada con `thinkingBudget: 0` (~1.5s de respuesta).
-  - Fallback automático en cascada entre modelos (`gemini-3-flash-preview`, `gemini-3.6-flash`, `gemini-3.8-flash`) ante errores 503 por sobrecarga temporal de servidores de Google o límites de cuota (429).
-  - Analizador sintáctico local de respaldo para garantizar diagnósticos detallados incluso sin conexión a internet.
-  - Configurable desde **Ajustes del Panel** (activar/desactivar IA, ingresar API Key y selector de modelos).
-
----
-
-### 📦 Gestor de Mods con Confirmación Sostenida ("Hold to Confirm")
-- **Acciones Masivas Seguras:**
-  - ⏸️ **Desactivar todos los mods:** Botón ámbar que requiere mantener presionado durante 1.5 segundos con barra de progreso fluida para evitar clics accidentales; renombra todos los `.jar` a `.jar.disabled`.
-  - 🗑️ **Eliminar todos los mods:** Botón destructivo rojo que requiere mantener presionado durante 2.0 segundos antes de eliminar los mods del servidor.
-- **Actualización Fluida sin Recargas:** Cambios de estado instantáneos en la interfaz sin parpadeos ni recargas completas de pantalla.
-- **Carga Drag-and-Drop:** Sube múltiples archivos `.jar` simultáneamente arrastrándolos directamente al navegador con barra de progreso en vivo.
-- **Gestión Individual:** Activación/desactivación unitaria, renombrado y eliminación.
-
----
-
-### 📊 Telemetría y Rendimiento Real (Sin Mocks)
-- **Monitoreo en Tiempo Real:** Uso de CPU del sistema y del proceso Java, memoria RAM consumida (asignada vs disponible) y espacio en disco.
-- **TPS y MSPT Reales:** Lectura en vivo de TPS (Ticks Per Second) y tiempo promedio por tick mediante comandos de telemetría e integración de procesos.
-
----
-
-### 📁 Explorador de Directorios del Servidor y Detección de Minecraft
-- **Navegación Visual del Sistema de Archivos:** Permite explorar de forma segura e interactiva las rutas internas del servidor y del contenedor Docker desde **Ajustes del Panel**.
-- **Detección Automática de Servidores Minecraft:** Analiza e identifica al instante carpetas que contengan `server/`, `server.jar`, `mods/` o `server.properties` resaltándolas con la insignia ✨ **Minecraft**.
-- **Accesos Rápidos a Volúmenes Docker:** Atajos directos al home del host y `/data` con verificación de existencia en tiempo real.
-- **Validación y Guardado In-Situ:** Diagnóstico de subdirectorios clave (`server/`, `mods/`, `logs/`, etc.) y guardado dinámico de la ruta raíz sin reiniciar el contenedor.
-
----
-
-### 💻 Consola Interactiva y Red
-- **Terminal xterm.js:** Emulador completo con streaming bidireccional vía WebSocket (`/ws/console`), soporte de colores ANSI y ejecución de comandos RCON y entrada estándar (stdin).
-- **Túnel Playit.gg Integrado:** Detección y gestión del binario de Playit.gg, control de inicio/parada y captura automática de la dirección pública asignada (`*.playit.gg`).
-- **Editor Visual de `server.properties`:** Formulario interactivo por categorías lógicas y editor en texto plano con guardado atómico y copias de seguridad automáticas `.bak`.
-- **Control de Jugadores:** Gestión completa de OPs (`ops.json`), Lista Blanca (`whitelist.json`), Baneos (`banned-players.json`) y avatares de skins de Mojang.
-
----
-
-## 🏗️ Arquitectura del Proyecto
+El proceso Node del panel inicia Minecraft como proceso hijo dentro del mismo contenedor. Todo el estado queda en `/data`:
 
 ```text
-mcserver-manager/
-├── client/                         # Frontend SPA (React 18 + Vite + TypeScript + Tailwind CSS)
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── layout/             # Sidebar, Topbar, MobileNav, MainLayout
-│   │   │   ├── rareui/             # HoldButton, GlassShimmerButton, AnimatedTab, RareIcons
-│   │   │   └── common/             # Modales y componentes reutilizables
-│   │   ├── features/
-│   │   │   ├── dashboard/          # Métricas, estado, diagnóstico con IA y acciones
-│   │   │   ├── console/            # Terminal xterm.js & hook useConsoleWs
-│   │   │   ├── mods/               # Gestor de mods con subida, toggle y hold buttons
-│   │   │   ├── versions/           # Selector e instalador de Minecraft / NeoForge
-│   │   │   ├── properties/         # Editor reactivo de server.properties
-│   │   │   ├── players/            # OPs, Whitelist y Bans
-│   │   │   ├── playit/             # Control y logs del túnel Playit.gg
-│   │   │   └── settings/           # Configuración de IA (Gemini), modelos y rutas
-│   │   ├── lib/
-│   │   │   ├── api.ts              # Cliente HTTP tipado con credenciales seguras
-│   │   │   └── types.ts            # Definiciones de tipos compartidos
-│   │   └── App.tsx
-├── server/                         # Backend API & WebSocket (Node.js + Express + TypeScript)
-│   ├── src/
-│   │   ├── config/                 # Constantes y rutas del servidor
-│   │   ├── middlewares/            # Autenticación JWT y validaciones
-│   │   ├── routes/                 # Endpoints REST (/auth, /status, /mods, /settings, etc.)
-│   │   ├── services/
-│   │   │   ├── ai.service.ts       # Integración con Google Gemini (@google/genai)
-│   │   │   ├── process.service.ts  # Control de proceso Minecraft, captura de logs y crashes
-│   │   │   ├── mods.service.ts     # CRUD y operaciones masivas de mods (disable-all, delete-all)
-│   │   │   ├── config.service.ts   # Persistencia en panel-config.json
-│   │   │   ├── rcon.service.ts     # Protocolo RCON cliente
-│   │   │   ├── monitor.service.ts  # Métricas de hardware y TPS
-│   │   │   ├── versions.service.ts # Descargas oficiales de Mojang y NeoForge Maven
-│   │   │   └── playit.service.ts   # Control del túnel Playit.gg
-│   │   ├── ws/
-│   │   │   └── console.ws.ts       # Servidor WebSocket para streaming de consola
-│   │   └── index.ts                # Inicialización y servidor de archivos estáticos
-├── Dockerfile                      # Multi-stage build (Node 22 + Java 21 + Playit)
-├── docker-compose.yml              # Despliegue listo para Dokploy / Servidor dedicado
-└── package.json                    # Scripts del monorepo
+/data/
+├── panel-config.json
+├── server/             # NeoForge/Minecraft, mundo, mods y logs
+├── scripts/            # scripts de arranque generados
+└── playit/             # identidad y configuración persistente del agente
 ```
 
----
+La consola web escribe en la entrada estándar del proceso Minecraft. Las acciones de jugadores modifican los JSON del servidor y, si el proceso está activo, envían el comando equivalente a su consola.
 
-## 🚀 Despliegue en Producción (Dokploy / Docker)
-
-### Ejecución con Docker Compose
+## Desarrollo local
 
 ```bash
-cp .env.example .env
-# Edita .env con la ruta real, UID/GID, credenciales y nombre de la unidad.
-sudo install -d -m 0750 -o 1000 -g 1000 /srv/mcserver-manager/data
-# Activa primero el bridge del host (se explica abajo) y después despliega:
-docker compose up -d --build
-```
-
-El panel estará disponible de inmediato en `http://localhost:3000`.
-
-### 📂 Integración con un Minecraft gestionado por systemd
-
-El manager monta el árbol del host que se indique en `HOST_HOME_PATH` usando la misma ruta absoluta dentro del contenedor. Así el explorador puede recorrer todo `/home/vm` y el servidor Minecraft continúa fuera de Docker, ejecutado por `systemd`.
-
-Ejemplo en `.env`:
-
-```dotenv
-HOST_HOME_PATH=/home/vm
-MINECRAFT_HOST_PATH=/home/vm/minecraft
-MC_UID=1000
-MC_GID=1000
-MC_SERVICE_NAME=minecraft.service
-MANAGER_DATA_PATH=/srv/mcserver-manager/data
-MC_CONTROL_HOST_PATH=/run/user/1000/mcmanager
-```
-
-`MINECRAFT_HOST_PATH` debe ser la ruta que aparece en `WorkingDirectory` de `systemctl cat minecraft.service`. Como `HOST_HOME_PATH` se monta sobre sí misma, el contenedor verá esa misma ruta absoluta y también todo el resto del árbol `/home/vm`.
-
-El explorador general usa `FILE_EXPLORER_ROOT=HOST_HOME_PATH`; por tanto, puede administrar archivos en todo el home montado. Esta capacidad debe protegerse con la autenticación del panel y no debe publicarse sin HTTPS ni una contraseña fuerte.
-
-El servicio `ops/mc-manager-bridge.service` instala un puente Unix restringido en el host para las acciones `status`, `start`, `stop`, `restart` y `kill`. El puente debe ejecutarse en el host, no dentro de Docker:
-
-```bash
-sudo install -m 0755 ops/mc-manager-bridge.py /usr/local/libexec/mc-manager-bridge.py
-sudo install -m 0644 ops/mc-manager-bridge.service /etc/systemd/system/mc-manager-bridge.service
-# Si el usuario/UID no es vm/1000, ajusta MC_SOCKET_GROUP y el chown de la unidad.
-sudo systemctl daemon-reload
-sudo systemctl enable --now mc-manager-bridge.service
-```
-
-El puente nunca recibe nombres de unidades ni comandos shell desde el panel; solo usa la unidad fija configurada en su entorno.
-
-Si `minecraft.service` pertenece al usuario `vm` y se administra con `systemctl --user`, usa la unidad `ops/mc-manager-bridge-user.service` en lugar de la unidad global:
-
-```bash
-sudo install -m 0755 ops/mc-manager-bridge.py /usr/local/libexec/mc-manager-bridge.py
-mkdir -p ~/.config/systemd/user
-install -m 0644 ops/mc-manager-bridge-user.service ~/.config/systemd/user/mc-manager-bridge.service
-sudo loginctl enable-linger vm
-systemctl --user daemon-reload
-systemctl --user enable --now mc-manager-bridge.service
-```
-
-La unidad de usuario usa `/run/user/1000/mcmanager`, que debe coincidir con `MC_CONTROL_HOST_PATH` en Dokploy. Si el usuario o UID del servidor son diferentes, cambia `vm`, `1000` y la ruta del socket en la unidad y en el entorno de Dokploy.
-
-### 🧪 Prueba local con el servidor de `test/`
-
-El repositorio incluye un Compose aislado para comprobar el acceso a la carpeta y el modo externo:
-
-```bash
-mkdir -p /run/user/$(id -u)/mcmanager-test
-systemctl --user link "$(pwd)/ops/minecraft-test.service"
-systemctl --user daemon-reload
-MC_SERVICE_NAME=minecraft-test.service \
-MC_CONTROL_SOCKET=/run/user/$(id -u)/mcmanager-test/control.sock \
-MC_SYSTEMCTL_SCOPE=user \
-MC_SOCKET_GROUP="$(id -gn)" \
-python3 ops/mc-manager-bridge.py
-# En otra terminal:
-docker compose -f docker-compose.test.yml build
-docker compose -f docker-compose.test.yml up -d
-```
-
-El panel de prueba queda en `http://localhost:3001`. Al terminar, detén el contenedor y elimina el enlace del servicio temporal con `systemctl --user unlink minecraft-test.service`.
-
-### Variables de Entorno
-
-| Variable | Descripción | Valor por Defecto |
-| :--- | :--- | :--- |
-| `PORT` | Puerto HTTP del panel y del WebSocket | `3000` |
-| `HOST_HOME_PATH` | Árbol del host visible para el explorador general | `/home/vm` |
-| `MINECRAFT_HOST_PATH` | Ruta absoluta del servidor existente gestionado por systemd | `/home/vm/minecraft` |
-| `FILE_EXPLORER_ROOT` | Raíz que usa el explorador de archivos | Igual a `HOST_HOME_PATH` |
-| `SERVER_ROOT` | Directorio raíz del servidor Minecraft dentro del montaje | Igual a `MINECRAFT_HOST_PATH` |
-| `MASTER_PASSWORD` | Contraseña inicial de administrador | Si está vacía, se solicita en el primer acceso |
-| `JWT_SECRET` | Clave secreta para firmar tokens de sesión | Autogenerada criptográficamente |
-
----
-
-## 🌐 Configuración con Cloudflare Tunnel
-
-Para publicar el panel hacia internet con Cloudflare Tunnel:
-1. Apunta el servicio del túnel hacia `http://localhost:3000` (o el nombre del contenedor en la red Docker).
-2. En el panel de Cloudflare, accede a: **Domain -> Network -> WebSockets** y asegúrate de que esté **Activado** para el correcto funcionamiento de la consola en vivo y la telemetría.
-
----
-
-## 💻 Desarrollo Local
-
-### 1. Instalar dependencias
-
-```bash
-npm install
-cd client && npm install
-cd ../server && npm install
-```
-
-### 2. Iniciar en modo desarrollo
-
-```bash
-npm run dev
-```
-
-Levantará concurrentemente:
-- **Frontend Vite:** `http://localhost:5173` (con Hot Module Replacement).
-- **Backend Express & WS:** `http://localhost:3000`.
-
-### 3. Compilar bundle de producción
-
-```bash
+npm install --prefix client
+npm install --prefix server
 npm run build
 ```
 
----
+Para probar el servidor incluido en `test/` dentro de un contenedor:
 
-## 🛡️ Seguridad
+```bash
+docker compose -f docker-compose.test.yml up -d --build
+```
 
-- **Hashes Criptográficos:** Contraseñas protegidas mediante `bcryptjs` con salting seguro.
-- **Protección de Sesión:** Autenticación basada en cookies `HttpOnly` (`mc_token`) con SameSite estricto.
-- **Sanitización de Rutas:** Validación contra ataques de *Path Traversal* en subidas, descargas y renombrado de mods o archivos.
-- **Escrituras Atómicas:** Modificaciones a archivos de configuración (`server.properties`, `ops.json`, etc.) realizadas mediante escritura previa en archivos temporales y sustitución atómica para prevenir corrupción de datos en caso de apagones o detenciones abruptas.
+La interfaz queda en [http://localhost:3001](http://localhost:3001) y el puerto de Minecraft de prueba en `127.0.0.1:25566`. La prueba monta únicamente `test/` en `/data`; no utiliza carpetas del home ni servicios del host.
+
+Para detenerla:
+
+```bash
+docker compose -f docker-compose.test.yml down
+```
+
+## Despliegue con Dokploy
+
+Usa el `docker-compose.yml` del repositorio. En las variables de entorno del servicio configura al menos:
+
+```dotenv
+MASTER_PASSWORD=una-contraseña-larga-del-panel
+JWT_SECRET=un-secreto-aleatorio-persistente
+MINECRAFT_AUTOSTART=true
+PLAYIT_AUTOSTART=false
+PLAYIT_LOCAL_PORT=25565
+```
+
+El Compose crea el volumen nombrado `mcserver-data` y lo monta en `/data`. En Dokploy no agregues bind mounts hacia `/home`, `/home/vm`, sockets del sistema o rutas de otro servidor. Publica el puerto `3000` para el panel y `25565` para Minecraft si se necesita acceso directo.
+
+En un despliegue existente, realiza primero una copia de seguridad de los datos del servidor y cópialos al volumen `/data/server` del nuevo servicio. No reutilices `panel-config.json` si contiene rutas antiguas fuera de `/data`; el panel las migra a la raíz interna.
+
+## Primer arranque
+
+1. Abre el panel y establece la contraseña inicial.
+2. En **Versión & Motor**, instala Minecraft y NeoForge y acepta el EULA.
+3. En **Configuración del Servidor**, revisa `online-mode`. Al dejarlo desactivado se aceptan cuentas no premium; el panel también desactiva `enforce-secure-profile` para que ese modo sea coherente.
+4. Usa **Gestor de Mods** para subir los `.jar` y reinicia Minecraft.
+5. En **Túnel Playit.gg**, vincula el agente y guarda el puerto local `25565`. La identidad se guarda en `/data/playit`.
+
+El modo no premium reduce la verificación de identidad. Usa una whitelist, una contraseña fuerte para el panel y HTTPS antes de compartir el servicio.
+
+## Variables
+
+| Variable | Uso | Valor habitual |
+|---|---|---|
+| `SERVER_ROOT` | Raíz única de datos del contenedor | `/data` |
+| `FILE_EXPLORER_ROOT` | Raíz del explorador | `/data` |
+| `ALLOWED_ROOTS` | Rutas que el explorador puede visitar | `/data` |
+| `PANEL_CONFIG_PATH` | Configuración persistente del panel | `/data/panel-config.json` |
+| `MINECRAFT_AUTOSTART` | Iniciar Minecraft al arrancar Node | `true` |
+| `PLAYIT_AUTOSTART` | Iniciar Playit al arrancar Node | `false` |
+| `PLAYIT_LOCAL_PORT` | Puerto local al que apunta Playit | `25565` |
+| `MASTER_PASSWORD` | Contraseña inicial si aún no existe configuración | obligatoria |
+| `JWT_SECRET` | Firma persistente de sesiones | obligatoria |
+
+## Estructura del proyecto
+
+```text
+client/                 # React + Vite
+server/src/
+├── routes/             # API autenticada
+├── services/           # Minecraft, versiones, mods, Playit y telemetría
+├── ws/                 # consola en vivo y logs
+└── data/               # reglas de diagnóstico
+Dockerfile              # Node 22 + Java 21 + agente Playit
+docker-compose.yml      # despliegue persistente de un solo contenedor
+docker-compose.test.yml # prueba con el fixture local
+```

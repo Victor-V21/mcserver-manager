@@ -109,6 +109,35 @@ router.post('/login', (req: Request, res: Response) => {
   res.json({ success: true, token });
 });
 
+// POST /api/auth/change-password
+router.post('/change-password', (req: Request, res: Response) => {
+  const config = configService.getConfig();
+  const token = req.cookies?.mc_token || req.headers.authorization?.replace(/^Bearer\s+/i, '');
+  const { currentPassword, newPassword } = req.body || {};
+
+  if (!token) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  try {
+    jwt.verify(token, config.jwtSecret);
+  } catch {
+    res.status(401).json({ error: 'Unauthorized: Invalid or expired session' });
+    return;
+  }
+  if (typeof currentPassword !== 'string' || !bcrypt.compareSync(currentPassword, config.passwordHash)) {
+    res.status(400).json({ error: 'La contraseña actual no es correcta' });
+    return;
+  }
+  if (typeof newPassword !== 'string' || newPassword.length < 4) {
+    res.status(400).json({ error: 'La nueva contraseña debe tener al menos 4 caracteres' });
+    return;
+  }
+
+  configService.setPassword(newPassword);
+  res.json({ success: true });
+});
+
 // POST /api/auth/logout
 router.post('/logout', (_req: Request, res: Response) => {
   res.clearCookie('mc_token');

@@ -52,10 +52,10 @@ export class AiService {
       let logs = typeof input === 'string' ? input : input.logs || '';
       const mods = typeof input === 'string' ? (modsParam || []) : input.mods || [];
       const crashReport = typeof input === 'object' ? input.crashReport : '';
-      const mcVersion = typeof input === 'object' ? input.mcVersion || '1.21.1' : '1.21.1';
-      const loader = typeof input === 'object' ? input.loader || 'neoforge' : 'neoforge';
+      const mcVersion = typeof input === 'object' ? input.mcVersion || 'no detectada' : 'no detectada';
+      const loader = typeof input === 'object' ? input.loader || 'no detectado' : 'no detectado';
       const loaderVersion = typeof input === 'object' ? input.loaderVersion || '' : '';
-      const javaVersion = typeof input === 'object' ? input.javaVersion || 'Java 21' : 'Java 21';
+      const javaVersion = typeof input === 'object' ? input.javaVersion || 'no detectada' : 'no detectada';
 
       // Trim crash report or log text intelligently to prioritize the actual error block
       let errorContext = '';

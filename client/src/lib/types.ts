@@ -35,8 +35,8 @@ export interface TelemetryData {
     serverSizeFormatted?: string;
   };
   tps: {
-    current: number;
-    avgTickMs?: number;
+    current: number | null;
+    avgTickMs?: number | null;
     history: number[];
   };
   players: {
@@ -108,6 +108,10 @@ export interface PlayitStatus {
   pid: number | null;
   agentId?: string;
   tunnels: PlayitTunnel[];
+  binaryPath?: string | null;
+  secretPath?: string;
+  localPort?: number;
+  lastError?: string | null;
   logs: string[];
 }
 
@@ -126,8 +130,8 @@ export interface PanelSettings {
   initialSetupDone?: boolean;
   validatedPaths: PathValidationStatus;
   autoRestartOnCrash: boolean;
-  rconPort: number;
-  rconHost: string;
+  storageRoot?: string;
+  minecraftAutostart?: boolean;
   maxMemoryAllocated: string;
   aiDiagnosticEnabled?: boolean;
   aiApiKey?: string;

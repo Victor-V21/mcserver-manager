@@ -159,14 +159,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="flex justify-between text-slate-400 font-mono pt-1">
             <span>RAM</span>
             <span className="text-slate-200">
-              {(telemetry.ram.used / 1024).toFixed(1)} / {(telemetry.ram.maxAllocated / 1024).toFixed(0)} GB
+              {telemetry.ram.maxAllocated > 0 ? `${(telemetry.ram.used / 1024).toFixed(1)} / ${(telemetry.ram.maxAllocated / 1024).toFixed(1)} GB` : 'No configurada'}
             </span>
           </div>
           <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
             <div
               className="bg-cyan-500 h-full transition-all duration-500"
               style={{
-                width: `${Math.min((telemetry.ram.used / telemetry.ram.maxAllocated) * 100, 100)}%`,
+                width: `${telemetry.ram.maxAllocated > 0 ? Math.min((telemetry.ram.used / telemetry.ram.maxAllocated) * 100, 100) : 0}%`,
               }}
             />
           </div>

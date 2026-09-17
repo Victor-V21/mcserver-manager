@@ -56,7 +56,7 @@ export const ConnectedPlayersList: React.FC<ConnectedPlayersListProps> = ({
         <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-800/80 border border-slate-700 text-xs font-mono text-slate-300">
           <span className="font-semibold text-emerald-400">{players.length}</span>
           <span className="text-slate-500">/</span>
-          <span>{maxPlayers}</span>
+          <span>{maxPlayers > 0 ? maxPlayers : '—'}</span>
         </div>
       </div>
 
@@ -71,12 +71,12 @@ export const ConnectedPlayersList: React.FC<ConnectedPlayersListProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
           {players.map((player) => (
             <div
-              key={player.uuid}
+              key={player.uuid || player.name}
               className="p-3 rounded-xl bg-dark-950/60 border border-slate-800 hover:border-slate-700 transition-all flex items-center justify-between group"
             >
               <div className="flex items-center gap-3 min-w-0">
                 <img
-                  src={`https://crafatar.com/avatars/${player.uuid}?size=40&default=MHF_Steve&overlay`}
+                  src={`https://crafatar.com/avatars/${player.uuid || player.name}?size=40&default=MHF_Steve&overlay`}
                   alt={player.name}
                   className="w-10 h-10 rounded-lg shadow-sm bg-slate-800 shrink-0 image-pixelated"
                   onError={(e) => {
@@ -95,7 +95,7 @@ export const ConnectedPlayersList: React.FC<ConnectedPlayersListProps> = ({
                   <div className="flex items-center gap-2 text-[11px] text-slate-400 font-mono">
                     <span className="flex items-center gap-1 text-emerald-400">
                       <Wifi className="w-2.5 h-2.5" />
-                      {player.ping ?? 28}ms
+                      {player.ping !== undefined ? `${player.ping}ms` : 'Ping no disponible'}
                     </span>
                   </div>
                 </div>

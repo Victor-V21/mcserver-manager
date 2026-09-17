@@ -48,7 +48,11 @@ export const PropertiesView: React.FC = () => {
   };
 
   const handleFieldChange = (key: string, value: any) => {
-    setProperties((prev) => ({ ...prev, [key]: value }));
+    setProperties((prev) => ({
+      ...prev,
+      [key]: value,
+      ...(key === 'online-mode' && value === false ? { 'enforce-secure-profile': false } : {}),
+    }));
   };
 
   const handleRawChange = (text: string) => {
@@ -191,6 +195,16 @@ export const PropertiesView: React.FC = () => {
         onChange={(id) => setActiveTab(id as any)}
         layoutId="properties-tabs"
       />
+
+      {properties['online-mode'] === false && (
+        <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs flex items-start gap-2.5">
+          <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-semibold">Modo no premium habilitado</p>
+            <p className="text-amber-100/70 mt-0.5">El servidor no validará cuentas con los servicios oficiales. Usa una whitelist y no compartas la dirección del panel.</p>
+          </div>
+        </div>
+      )}
 
       {/* Tab Panels */}
       <div className="glass-panel rounded-2xl p-5 sm:p-6 border border-slate-800">
