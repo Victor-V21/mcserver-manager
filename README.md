@@ -60,7 +60,7 @@ En un despliegue existente, realiza primero una copia de seguridad de los datos 
 2. En **Versión & Motor**, instala Minecraft y NeoForge y acepta el EULA.
 3. En **Configuración del Servidor**, revisa `online-mode`. Al dejarlo desactivado se aceptan cuentas no premium; el panel también desactiva `enforce-secure-profile` para que ese modo sea coherente.
 4. Usa **Gestor de Mods** para subir los `.jar` y reinicia Minecraft.
-5. En **Túnel Playit.gg**, vincula el agente y guarda el puerto local `25565`. La identidad se guarda en `/data/playit`.
+5. En **Túnel Playit.gg**, abre el enlace para obtener una clave Docker de Playit, pégala en **Vincular agente** y guarda el puerto local `25565`. La identidad se guarda en `/data/playit` y se entrega al agente mediante su socket IPC local.
 
 El modo no premium reduce la verificación de identidad. Usa una whitelist, una contraseña fuerte para el panel y HTTPS antes de compartir el servicio.
 
@@ -75,6 +75,7 @@ El modo no premium reduce la verificación de identidad. Usa una whitelist, una 
 | `MINECRAFT_AUTOSTART` | Iniciar Minecraft al arrancar Node | `true` |
 | `PLAYIT_AUTOSTART` | Iniciar Playit al arrancar Node | `false` |
 | `PLAYIT_LOCAL_PORT` | Puerto local al que apunta Playit | `25565` |
+| `PLAYIT_IPC_SOCKET_PATH` | Socket IPC local de Playit; normalmente no hace falta definirlo | `/run/playit/playitd.sock` |
 | `MASTER_PASSWORD` | Contraseña inicial si aún no existe configuración | obligatoria |
 | `JWT_SECRET` | Firma persistente de sesiones | obligatoria |
 

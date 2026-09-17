@@ -12,6 +12,9 @@ import {
   Terminal,
   Save,
   AlertCircle,
+  ExternalLink,
+  KeyRound,
+  ShieldCheck,
 } from 'lucide-react';
 
 export const PlayitView: React.FC = () => {
@@ -24,14 +27,17 @@ export const PlayitView: React.FC = () => {
   const [secretPath, setSecretPath] = useState('');
   const [binaryPath, setBinaryPath] = useState<string | null>(null);
   const [configSaving, setConfigSaving] = useState(false);
+  const [playitSecret, setPlayitSecret] = useState('');
+  const [linkLoading, setLinkLoading] = useState(false);
+  const [linkMessage, setLinkMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadPlayit();
   }, []);
 
-  const loadPlayit = async () => {
-    setLoading(true);
+  const loadPlayit = async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     try {
       const [data, config] = await Promise.all([api.getPlayitStatus(), api.getPlayitConfig()]);
       setStatus(data);
@@ -49,10 +55,10 @@ export const PlayitView: React.FC = () => {
 
   const handleSaveConfig = async () => {
     setConfigSaving(true);
+    setError(null);
     try {
       const result = await api.savePlayitConfig(localPort);
       setLocalPort(result.localPort);
-      setError(null);
     } catch (err: any) {
       setError(err.message || 'No se pudo guardar el puerto local');
     } finally {
@@ -62,11 +68,35 @@ export const PlayitView: React.FC = () => {
 
   const handleAction = async (action: 'start' | 'stop' | 'restart') => {
     setActionLoading(true);
+    setError(null);
     try {
       await api.executePlayitAction(action);
       await loadPlayit();
+    } catch (err: any) {
+      setError(err.message || 'No se pudo cambiar el estado de Playit');
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const handleLink = async () => {
+    if (!playitSecret.trim()) {
+      setError('Pega la clave de vinculación de Playit antes de continuar');
+      return;
+    }
+
+    setLinkLoading(true);
+    setError(null);
+    setLinkMessage(null);
+    try {
+      const result = await api.linkPlayit(playitSecret);
+      setPlayitSecret('');
+      setLinkMessage(result.message);
+      await loadPlayit();
+    } catch (err: any) {
+      setError(err.message || 'No se pudo vincular el agente de Playit');
+    } finally {
+      setLinkLoading(false);
     }
   };
 
@@ -78,6 +108,14 @@ export const PlayitView: React.FC = () => {
 
   const isRunning = Boolean(status?.isRunning);
   const tunnel = status?.tunnels?.[0];
+
+  useEffect(() => {
+    if (!isRunning) return undefined;
+    const interval = window.setInterval(() => {
+      void loadPlayit(false);
+    }, 3000);
+    return () => window.clearInterval(interval);
+  }, [isRunning]);
 
   if (loading) {
     return (
@@ -214,6 +252,84 @@ export const PlayitView: React.FC = () => {
           </GlassShimmerButton>
         </div>
         <p className="text-[11px] text-slate-500 font-mono">Binario: {binaryPath || 'no encontrado en la imagen'}</p>
+
+        {!configured ? (
+          <div className="rounded-xl border border-amber-500/25 bg-amber-500/[0.06] p-4 space-y-3">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 rounded-lg border border-amber-500/25 bg-amber-500/10 p-2 text-amber-300">
+                <KeyRound className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <h4 className="text-xs font-semibold text-amber-100">Vincula este agente con tu cuenta</h4>
+                <p className="mt-1 text-[11px] leading-relaxed text-amber-200/70">
+                  El agente está instalado, pero todavía no tiene identidad. Obtén una clave para este servidor en Playit y pégala aquí.
+                </p>
+                <a
+                  href="https://playit.gg/account/setup/wizard/new-account/docker/mcserver-manager"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-medium text-cyan-300 hover:text-cyan-200 transition-colors"
+                >
+                  Obtener clave en Playit.gg
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-2">
+              <label htmlFor="playit-secret" className="sr-only">Clave de vinculación de Playit</label>
+              <input
+                id="playit-secret"
+                type="password"
+                autoComplete="off"
+                spellCheck={false}
+                value={playitSecret}
+                onChange={(event) => setPlayitSecret(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') void handleLink();
+                }}
+                placeholder="Pega aquí tu secret key de Playit"
+                className="min-w-0 flex-1 px-3 py-2 rounded-xl bg-dark-950 border border-amber-500/25 text-white text-xs font-mono placeholder:text-slate-600 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/40"
+              />
+              <GlassShimmerButton
+                variant="cyan"
+                size="sm"
+                onClick={handleLink}
+                disabled={linkLoading || !playitSecret.trim()}
+                aria-label="Vincular agente de Playit"
+              >
+                {linkLoading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}
+                <span>{linkLoading ? 'Vinculando…' : 'Vincular agente'}</span>
+              </GlassShimmerButton>
+            </div>
+            <p className="text-[10px] text-slate-500">
+              La clave se envía una sola vez al agente local y no se almacena en la configuración del manager.
+            </p>
+          </div>
+        ) : (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.05] px-3.5 py-3">
+            <div className="flex items-center gap-2 text-[11px] text-emerald-200">
+              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+              <span>Identidad de Playit disponible para este contenedor.</span>
+            </div>
+            <a
+              href="https://playit.gg/account/tunnels"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 text-[11px] font-medium text-cyan-300 hover:text-cyan-200 transition-colors"
+            >
+              Administrar túneles
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          </div>
+        )}
+
+        {linkMessage && (
+          <div className="flex items-center gap-2 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3 py-2.5 text-[11px] text-emerald-200">
+            <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>{linkMessage}. El agente queda listo para publicar Minecraft.</span>
+          </div>
+        )}
       </div>
 
       {/* Active Tunnel Details Cards */}
@@ -262,9 +378,13 @@ export const PlayitView: React.FC = () => {
             <p className="text-[11px] text-slate-400">Tráfico redirigido al puerto local de Java</p>
           </div>
         </div>
+      ) : isRunning ? (
+        <div className="glass-panel rounded-2xl p-6 text-center text-cyan-200 border border-cyan-500/20 text-xs">
+          El agente de Playit está conectado y todavía está esperando los datos del túnel. Actualiza en unos segundos.
+        </div>
       ) : (
         <div className="glass-panel rounded-2xl p-6 text-center text-slate-500 border border-slate-800 text-xs">
-          El proceso de Playit está inactivo. Haz clic en "Iniciar Túnel" para conectar el servidor al mundo exterior.
+          El proceso de Playit está detenido. Haz clic en "Iniciar Túnel" para conectar el servidor al mundo exterior.
         </div>
       )}
 

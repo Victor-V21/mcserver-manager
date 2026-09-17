@@ -267,6 +267,12 @@ export const api = {
       body: JSON.stringify({ localPort }),
     });
   },
+  linkPlayit: async (secret: string): Promise<{ success: boolean; message: string }> => {
+    return request('/api/playit/link', {
+      method: 'POST',
+      body: JSON.stringify({ secret }),
+    });
+  },
   executePlayitAction: async (action: 'start' | 'stop' | 'restart'): Promise<{ success: boolean; message: string }> => {
     return request('/api/playit/action', {
       method: 'POST',

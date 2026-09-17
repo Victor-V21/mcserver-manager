@@ -18,6 +18,21 @@ router.put('/config', (req: Request, res: Response) => {
   }
 });
 
+// POST /api/playit/link
+router.post('/link', async (req: Request, res: Response) => {
+  const secret = typeof req.body?.secret === 'string' ? req.body.secret : '';
+  if (!secret.trim()) {
+    res.status(400).json({ error: 'Debes proporcionar la clave de vinculación de Playit' });
+    return;
+  }
+
+  try {
+    res.json(await playitService.provisionSecret(secret));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || 'No se pudo vincular el agente de Playit' });
+  }
+});
+
 // GET /api/playit/status
 router.get('/status', (_req: Request, res: Response) => {
   try {

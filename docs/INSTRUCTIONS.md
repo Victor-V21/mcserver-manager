@@ -44,7 +44,10 @@ La API autenticada es:
 - `GET /api/playit/status`
 - `GET /api/playit/config`
 - `PUT /api/playit/config`
+- `POST /api/playit/link` con `{ "secret": "..." }` para provisionar la identidad mediante el socket IPC local del agente
 - `POST /api/playit/action` con `start`, `stop` o `restart`
+
+La clave de vinculación se recibe en memoria y no se registra en logs ni se guarda en la configuración del manager. El socket IPC permanece dentro del contenedor; no debe publicarse ni montarse desde el host.
 
 Los túneles se muestran únicamente después de leer un endpoint real de la salida del agente.
 
