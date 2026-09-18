@@ -143,13 +143,13 @@ export const api = {
   },
 
   // Server Properties
-  getProperties: async (): Promise<Record<string, any>> => {
+  getProperties: async (): Promise<{ properties: Record<string, any>; raw: string }> => {
     return request('/api/properties', { method: 'GET' });
   },
   saveProperties: async (props: Record<string, any>): Promise<{ success: boolean; message: string }> => {
     return request('/api/properties', {
       method: 'PUT',
-      body: JSON.stringify(props),
+      body: JSON.stringify({ properties: props }),
     });
   },
 
@@ -256,27 +256,49 @@ export const api = {
     });
   },
   uploadMod: async (file: File): Promise<{ success: boolean; filename: string }> => {
+    return api.uploadModWithProgress(file);
+  },
+  uploadModWithProgress: async (
+    file: File,
+    onProgress?: (percent: number) => void,
+  ): Promise<{ success: boolean; filename: string }> => {
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('mods', file);
     const token = typeof localStorage !== 'undefined' ? localStorage.getItem('mc_auth_token') : null;
-    const res = await fetch('/api/mods/upload', {
-      method: 'POST',
-      body: formData,
-      credentials: 'include',
-      headers: {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/api/mods/upload');
+      xhr.withCredentials = true;
+      if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) onProgress?.(Math.round((event.loaded / event.total) * 100));
+      };
+
+      xhr.onerror = () => reject(new Error('No se pudo conectar con el servidor para subir el mod'));
+      xhr.onabort = () => reject(new Error('La subida del mod fue cancelada'));
+      xhr.onload = () => {
+        let payload: any = null;
+        try {
+          payload = xhr.responseText ? JSON.parse(xhr.responseText) : null;
+        } catch {
+          payload = null;
+        }
+
+        if (xhr.status < 200 || xhr.status >= 300) {
+          if (xhr.status === 401 && typeof window !== 'undefined') {
+            window.dispatchEvent(new Event('mc_auth_unauthorized'));
+          }
+          reject(new Error(payload?.error || `Error al subir mod: HTTP ${xhr.status}`));
+          return;
+        }
+
+        onProgress?.(100);
+        resolve(payload || { success: true, filename: file.name });
+      };
+
+      xhr.send(formData);
     });
-    if (!res.ok) {
-      let errMsg = `Error al subir mod: HTTP ${res.status}`;
-      try {
-        const errJson = await res.json();
-        if (errJson.error) errMsg = errJson.error;
-      } catch {}
-      throw new Error(errMsg);
-    }
-    return await res.json();
   },
 
   // Playit

@@ -32,11 +32,12 @@ export const PropertiesView: React.FC = () => {
     setLoading(true);
     try {
       const data = await api.getProperties();
-      setProperties(data);
-      setInitialProperties(data);
+      const nextProperties = data.properties || {};
+      setProperties(nextProperties);
+      setInitialProperties(nextProperties);
 
       // Format raw text
-      const raw = Object.entries(data)
+      const raw = data.raw || Object.entries(nextProperties)
         .map(([k, v]) => `${k}=${v}`)
         .join('\n');
       setRawText(raw);
@@ -108,11 +109,11 @@ export const PropertiesView: React.FC = () => {
   };
 
   const tabs = [
-    { id: 'world', label: 'Mundo y Juego', icon: Globe },
-    { id: 'network', label: 'Red y Rendimiento', icon: Wifi },
-    { id: 'rules', label: 'Reglas y Seguridad', icon: ShieldCheck },
-    { id: 'motd', label: 'Editor de MOTD', icon: Sparkles },
-    { id: 'raw', label: 'Modo Avanzado (Raw)', icon: Code },
+    { id: 'world', label: 'Mundo', icon: Globe },
+    { id: 'network', label: 'Red', icon: Wifi },
+    { id: 'rules', label: 'Reglas', icon: ShieldCheck },
+    { id: 'motd', label: 'MOTD', icon: Sparkles },
+    { id: 'raw', label: 'Avanzado', icon: Code },
   ];
 
   if (loading) {
@@ -134,7 +135,7 @@ export const PropertiesView: React.FC = () => {
           </div>
           <div>
             <h2 className="text-base font-bold text-white tracking-wide">Configuración del Servidor</h2>
-            <p className="text-xs text-slate-400">Edición reactiva y atómica de server.properties</p>
+            <p className="text-xs text-slate-400">Ajustes de server.properties</p>
           </div>
         </div>
 
@@ -177,14 +178,9 @@ export const PropertiesView: React.FC = () => {
           ) : (
             <AlertCircle className="w-5 h-5 text-rose-400 shrink-0" />
           )}
-          <div className="text-xs">
-            <span className="font-semibold block">{notification.message}</span>
-            {notification.type === 'success' && (
-              <span className="text-slate-400 text-[11px] mt-0.5 block">
-                Los cambios se han escrito atómicamente en disco con backup .bak creado.
-              </span>
-            )}
-          </div>
+            <div className="text-xs">
+              <span className="font-semibold block">{notification.message}</span>
+            </div>
         </div>
       )}
 
@@ -366,15 +362,17 @@ export const PropertiesView: React.FC = () => {
         {/* TAB 3: Rules & Security */}
         {activeTab === 'rules' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div className="flex items-center justify-between p-3.5 rounded-xl bg-dark-950 border border-slate-800">
+            <div className="flex items-center justify-between gap-4 p-3.5 rounded-xl bg-dark-950 border border-amber-500/25">
               <div>
-                <span className="text-xs font-semibold text-white block">Modo Online (online-mode)</span>
-                <span className="text-[11px] text-slate-400 block">Verifica cuentas contra servidores oficiales de Mojang</span>
+                <span className="text-xs font-semibold text-white block">Permitir jugadores no premium</span>
+                <span className="text-[11px] text-slate-400 block">Desactiva la validación oficial de cuentas</span>
               </div>
               <input
+                id="allow-offline-players"
+                aria-label="Permitir jugadores no premium"
                 type="checkbox"
-                checked={Boolean(properties['online-mode'] !== false)}
-                onChange={(e) => handleFieldChange('online-mode', e.target.checked)}
+                checked={properties['online-mode'] === false}
+                onChange={(e) => handleFieldChange('online-mode', !e.target.checked)}
                 className="w-4 h-4 rounded text-emerald-500"
               />
             </div>

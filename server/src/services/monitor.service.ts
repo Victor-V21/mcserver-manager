@@ -127,7 +127,8 @@ export class MonitorService {
       hostCpu = Math.round((cpuLoad?.currentLoad || 0) * 10) / 10;
       if (memory?.total) {
         memTotal = Math.round(memory.total / (1024 * 1024));
-        memUsed = Math.round((memory.active || 0) / (1024 * 1024));
+        const usedBytes = Number(memory.used || memory.total - (memory.available || 0) || 0);
+        memUsed = Math.round(usedBytes / (1024 * 1024));
         memPercent = memTotal > 0 ? Math.round((memUsed / memTotal) * 100) : 0;
       }
     } catch (error) {

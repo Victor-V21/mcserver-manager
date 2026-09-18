@@ -115,6 +115,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return `${m}m`;
   };
 
+  const formatGb = (value: number) => {
+    if (!Number.isFinite(value) || value <= 0) return '0 GB';
+    return value >= 10 ? `${value.toFixed(0)} GB` : `${value.toFixed(1)} GB`;
+  };
+
   const playitTunnel = playit?.tunnels?.[0];
 
   return (
@@ -134,7 +139,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </span>
               </h3>
               <p className="text-xs text-slate-300 mt-0.5">
-                Selecciona tu versión de Minecraft y build de NeoForge para descargar e instalar el servidor automáticamente.
+                Instala Minecraft y NeoForge para comenzar.
               </p>
             </div>
           </div>
@@ -144,7 +149,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             size="sm"
             onClick={() => onNavigateTab('versions')}
           >
-            <span>Ir al Gestor de Versiones</span>
+                <span>Configurar versión</span>
             <ChevronRight className="w-4 h-4" />
           </GlassShimmerButton>
         </div>
@@ -541,7 +546,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <MetricGauge
           title="Uso de CPU"
           value={isOnline && telemetry ? `${telemetry.cpu.java}%` : '--'}
-          subtitle={telemetry ? `Host global: ${telemetry.cpu.host}%` : 'Sin datos de telemetría'}
+          subtitle={telemetry ? `Equipo: ${telemetry.cpu.host}%` : 'Sin datos de telemetría'}
           percentage={isOnline ? telemetry?.cpu?.java : undefined}
           icon={RareCpuIcon as any}
           variant="emerald"
@@ -549,12 +554,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         {/* RAM */}
         <MetricGauge
-          title="Memoria RAM"
+          title="Memoria del proceso"
           value={isOnline && telemetry ? `${(telemetry.ram.used / 1024).toFixed(2)} GB` : '--'}
           subtitle={telemetry?.ram?.maxAllocated
-            ? `Asignado: ${(telemetry.ram.maxAllocated / 1024).toFixed(1)} GB • Host libre: ${Math.max(0, (telemetry.ram.total - (telemetry.ram.systemUsed || 0)) / 1024).toFixed(1)} GB`
-            : 'Xmx no especificado en la configuración'}
-          percentage={telemetry?.ram?.maxAllocated ? (telemetry.ram.used / telemetry.ram.maxAllocated) * 100 : undefined}
+            ? `Límite Xmx: ${(telemetry.ram.maxAllocated / 1024).toFixed(1)} GB`
+            : 'Límite Xmx no detectado'}
+          percentage={isOnline && telemetry?.ram?.maxAllocated
+            ? (telemetry.ram.used / telemetry.ram.maxAllocated) * 100
+            : undefined}
           icon={RareRamIcon as any}
           variant="cyan"
         />
@@ -583,8 +590,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               ? `${telemetry.disk.serverSizeMb} MB`
               : '-- MB')
           }
-          subtitle="Tamaño total de los archivos del servidor"
-          percentage={0} // No mostramos barra de porcentaje por ser variable
+          subtitle={telemetry?.disk?.total
+            ? `${formatGb(telemetry.disk.free)} libres de ${formatGb(telemetry.disk.total)} en el volumen`
+            : 'Tamaño del directorio del servidor'}
           icon={RareDiskIcon as any}
           variant="indigo"
         />
@@ -614,7 +622,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
             <div>
               <h4 className="text-xs font-bold text-white group-hover:text-emerald-300 transition-colors">Versión & Motor</h4>
-              <p className="text-[11px] text-slate-400">Instalador NeoForge / MC</p>
+              <p className="text-[11px] text-slate-400">Minecraft y NeoForge</p>
             </div>
           </div>
           <ExternalLink className="w-4 h-4 text-slate-500 group-hover:text-emerald-400 group-hover:translate-x-0.5 transition-all" />
@@ -633,7 +641,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
             <div>
               <h4 className="text-xs font-bold text-white group-hover:text-amber-300 transition-colors">server.properties</h4>
-              <p className="text-[11px] text-slate-400">Gamemode, MOTD y red</p>
+              <p className="text-[11px] text-slate-400">Reglas y conexión</p>
             </div>
           </div>
           <ExternalLink className="w-4 h-4 text-slate-500 group-hover:text-amber-400 group-hover:translate-x-0.5 transition-all" />
@@ -652,7 +660,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
             <div>
               <h4 className="text-xs font-bold text-white group-hover:text-cyan-300 transition-colors">Gestor de Mods</h4>
-              <p className="text-[11px] text-slate-400">Subir y conmutar .jar</p>
+              <p className="text-[11px] text-slate-400">Gestionar archivos .jar</p>
             </div>
           </div>
           <ExternalLink className="w-4 h-4 text-slate-500 group-hover:text-cyan-400 group-hover:translate-x-0.5 transition-all" />
@@ -671,7 +679,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
             <div>
               <h4 className="text-xs font-bold text-white group-hover:text-indigo-300 transition-colors">Túnel Playit.gg</h4>
-              <p className="text-[11px] text-slate-400">IP pública y puertos</p>
+              <p className="text-[11px] text-slate-400">Conexión pública</p>
             </div>
           </div>
           <ExternalLink className="w-4 h-4 text-slate-500 group-hover:text-indigo-400 group-hover:translate-x-0.5 transition-all" />

@@ -3,6 +3,7 @@ import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { MobileNav } from './MobileNav';
 import { QuickActionsModal } from '../../features/dashboard/QuickActionsModal';
+import { ModUploadStatus } from '../../features/mods/ModUploadStatus';
 import { TelemetryData, PlayitStatus } from '../../lib/types';
 
 interface MainLayoutProps {
@@ -84,6 +85,8 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
         onExecute={onServerAction}
         actionPending={serverActionPending}
       />
+
+      <ModUploadStatus onOpenMods={() => onSelectTab('mods')} />
     </div>
   );
 };

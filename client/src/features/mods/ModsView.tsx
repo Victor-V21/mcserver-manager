@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '../../lib/api';
 import { ModFile } from '../../lib/types';
+import { useModUpload } from './ModUploadContext';
 import { Modal } from '../../components/common/Modal';
 import { AnimatedTabs } from '../../components/rareui/AnimatedTab';
 import { GlassShimmerButton } from '../../components/rareui/GlassShimmerButton';
@@ -44,9 +45,9 @@ export const ModsView: React.FC<ModsViewProps> = ({ telemetry }) => {
 
   // Upload state
   const [isDragging, setIsDragging] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [uploadStats, setUploadStats] = useState<{ total: number; uploaded: number; pct: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { jobs: uploadJobs, enqueue: enqueueModUploads } = useModUpload();
+  const previousUploadStates = useRef<Record<string, string>>({});
 
   // Modals
   const [modToDelete, setModToDelete] = useState<ModFile | null>(null);
@@ -56,6 +57,18 @@ export const ModsView: React.FC<ModsViewProps> = ({ telemetry }) => {
   useEffect(() => {
     loadMods();
   }, []);
+
+  useEffect(() => {
+    let shouldRefresh = false;
+    for (const job of uploadJobs) {
+      const previousState = previousUploadStates.current[job.id];
+      if (previousState === 'uploading' && (job.state === 'completed' || job.state === 'error')) {
+        shouldRefresh = true;
+      }
+      previousUploadStates.current[job.id] = job.state;
+    }
+    if (shouldRefresh) void loadMods(true);
+  }, [uploadJobs]);
 
   const loadMods = async (silent = false) => {
     if (!silent) setLoading(true);
@@ -85,7 +98,7 @@ export const ModsView: React.FC<ModsViewProps> = ({ telemetry }) => {
       await api.toggleMod(target, nextState);
       setNotice({
         type: 'warning',
-        message: `Mod "${mod.name}" ${nextState ? 'activado' : 'desactivado'}. Es necesario reiniciar el servidor para que los cambios se apliquen en Minecraft.`,
+        message: `"${mod.name}" ${nextState ? 'activado' : 'desactivado'}. Reinicia el servidor para aplicarlo.`,
       });
       await loadMods(true);
     } catch (err: any) {
@@ -113,7 +126,7 @@ export const ModsView: React.FC<ModsViewProps> = ({ telemetry }) => {
       );
       setNotice({
         type: 'warning',
-        message: `Se han desactivado todos los mods (${res.count || mods.length}). Es necesario reiniciar el servidor para que los cambios se apliquen en Minecraft.`,
+        message: `${res.count || mods.length} mods desactivados. Reinicia el servidor para aplicarlos.`,
       });
       await loadMods(true);
     } catch (err: any) {
@@ -131,7 +144,7 @@ export const ModsView: React.FC<ModsViewProps> = ({ telemetry }) => {
       setMods([]);
       setNotice({
         type: 'warning',
-        message: `Se han eliminado todos los mods (${count}) del servidor. Es necesario reiniciar el servidor para que los cambios se apliquen en Minecraft.`,
+        message: `${count} mods eliminados. Reinicia el servidor para aplicar los cambios.`,
       });
       await loadMods(true);
     } catch (err: any) {
@@ -149,7 +162,7 @@ export const ModsView: React.FC<ModsViewProps> = ({ telemetry }) => {
       await api.deleteMod(target);
       setNotice({
         type: 'warning',
-        message: `Mod "${modToDelete.name}" eliminado del disco. Es necesario reiniciar el servidor para que los cambios se apliquen en Minecraft.`,
+        message: `"${modToDelete.name}" eliminado. Reinicia el servidor para aplicar los cambios.`,
       });
       setModToDelete(null);
       await loadMods(true);
@@ -169,7 +182,7 @@ export const ModsView: React.FC<ModsViewProps> = ({ telemetry }) => {
       await api.renameMod(target, newFilename.trim());
       setNotice({
         type: 'warning',
-        message: `Mod renombrado a "${newFilename.trim()}". Es necesario reiniciar el servidor para que los cambios se apliquen en Minecraft.`,
+        message: `Mod renombrado a "${newFilename.trim()}". Reinicia el servidor para aplicarlo.`,
       });
       setModToRename(null);
       setNewFilename('');
@@ -226,42 +239,21 @@ export const ModsView: React.FC<ModsViewProps> = ({ telemetry }) => {
     }
   };
 
-  const handleFiles = async (files: FileList | null) => {
+  const handleFiles = (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const validFiles = Array.from(files).filter(f => f.name.endsWith('.jar') || f.name.endsWith('.jar.disabled'));
-    if (validFiles.length === 0) return;
-    
-    setUploading(true);
-    setUploadStats({ total: validFiles.length, uploaded: 0, pct: 0 });
-
-    let uploadedCount = 0;
-    for (let i = 0; i < validFiles.length; i++) {
-      const file = validFiles[i];
-      setUploadStats({ total: validFiles.length, uploaded: uploadedCount, pct: 30 });
-      await new Promise((r) => setTimeout(r, 200));
-      setUploadStats({ total: validFiles.length, uploaded: uploadedCount, pct: 75 });
-      try {
-        await api.uploadMod(file);
-        uploadedCount++;
-        setUploadStats({ total: validFiles.length, uploaded: uploadedCount, pct: 100 });
-      } catch (err: any) {
-        setNotice({
-          type: 'error',
-          message: `Error al subir ${file.name}: ${err.message}`,
-        });
-      }
+    if (validFiles.length === 0) {
+      setNotice({ type: 'error', message: 'Selecciona archivos .jar o .jar.disabled.' });
+      return;
     }
 
-    await new Promise((r) => setTimeout(r, 400));
-    setUploading(false);
-    setUploadStats(null);
-    if (uploadedCount > 0) {
-      setNotice({
-        type: 'warning',
-        message: `${uploadedCount} mod(s) subido(s) exitosamente. Es necesario reiniciar el servidor para que los cambios se apliquen en Minecraft.`,
-      });
-    }
-    loadMods(true);
+    enqueueModUploads(validFiles);
+    setNotice({
+      type: 'success',
+      message: `${validFiles.length} mod(s) añadidos a la cola de subida. Puedes cambiar de sección sin interrumpirla.`,
+    });
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    setTimeout(() => loadMods(true), 500);
   };
 
   const formatFileSize = (bytes: number) => {
@@ -281,6 +273,10 @@ export const ModsView: React.FC<ModsViewProps> = ({ telemetry }) => {
 
   const enabledCount = mods.filter((m) => m.isEnabled).length;
   const disabledCount = mods.filter((m) => !m.isEnabled).length;
+  const activeUploadJobs = uploadJobs.filter((job) => job.state === 'queued' || job.state === 'uploading');
+  const activeUploadBytes = activeUploadJobs.reduce((sum, job) => sum + job.uploadedBytes, 0);
+  const totalUploadBytes = activeUploadJobs.reduce((sum, job) => sum + job.size, 0);
+  const uploadProgress = totalUploadBytes > 0 ? Math.round((activeUploadBytes / totalUploadBytes) * 100) : 0;
 
   if (loading) {
     return (
@@ -306,7 +302,7 @@ export const ModsView: React.FC<ModsViewProps> = ({ telemetry }) => {
                 {mods.length} mods
               </span>
             </div>
-            <p className="text-xs text-slate-400">Carpeta server/mods/ con soporte de activación y .disabled</p>
+            <p className="text-xs text-slate-400">Activa, desactiva y descarga tus mods.</p>
           </div>
         </div>
 
@@ -408,11 +404,6 @@ export const ModsView: React.FC<ModsViewProps> = ({ telemetry }) => {
               </div>
               <div className="text-xs">
                 <p className="font-semibold">{notice.message}</p>
-                {notice.type === 'warning' && (
-                  <p className="text-[11px] text-amber-300/70 mt-0.5 font-mono">
-                    Los mods modificados o agregados requieren un reinicio completo del proceso del servidor para que NeoForge/Minecraft los aplique.
-                  </p>
-                )}
               </div>
             </div>
 
@@ -468,27 +459,27 @@ export const ModsView: React.FC<ModsViewProps> = ({ telemetry }) => {
           Arrastra y suelta tus archivos <span className="font-mono text-emerald-400">.jar</span> aquí
         </p>
         <p className="text-[11px] text-slate-400 mt-0.5">
-          O haz clic para seleccionar múltiples mods desde tu ordenador
+          O selecciona varios desde tu equipo
         </p>
       </div>
 
       {/* Upload Progress bars if any */}
-      {uploading && uploadStats && (
+      {activeUploadJobs.length > 0 && (
         <div className="glass-panel rounded-2xl p-4 border border-slate-800 space-y-3">
           <span className="text-xs font-semibold text-emerald-400 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="w-3.5 h-3.5 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
-              <span>Subiendo archivos a server/mods/...</span>
+              <span>Subiendo mods</span>
             </div>
             <span className="text-slate-300 font-mono text-[11px]">
-              {uploadStats.uploaded} de {uploadStats.total} mods cargados
+              {activeUploadJobs.length} pendientes · {uploadProgress}%
             </span>
           </span>
           <div className="space-y-1">
             <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden relative">
               <div 
                 className="bg-emerald-500 h-full transition-all duration-300" 
-                style={{ width: `${Math.max(5, (uploadStats.uploaded / uploadStats.total) * 100)}%` }} 
+                style={{ width: `${uploadProgress}%` }}
               />
             </div>
           </div>
@@ -527,9 +518,9 @@ export const ModsView: React.FC<ModsViewProps> = ({ telemetry }) => {
             <thead className="bg-dark-950 text-slate-400 font-mono uppercase text-[11px] border-b border-slate-800">
               <tr>
                 <th className="p-3.5">Estado</th>
-                <th className="p-3.5">Archivo / Mod</th>
+                <th className="p-3.5">Archivo</th>
                 <th className="p-3.5">Tamaño</th>
-                <th className="p-3.5">Modificación</th>
+                <th className="p-3.5">Actualizado</th>
                 <th className="p-3.5 text-right">Acciones</th>
               </tr>
             </thead>
