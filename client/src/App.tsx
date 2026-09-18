@@ -36,6 +36,8 @@ export const App: React.FC = () => {
     enabled: isAuthenticated,
   });
 
+  const [serverActionError, setServerActionError] = useState<string | null>(null);
+
   // Server Action mutation
   const serverActionMutation = useMutation({
     mutationFn: (action: 'start' | 'stop' | 'restart' | 'kill') =>
@@ -48,7 +50,12 @@ export const App: React.FC = () => {
   const handleServerAction = async (
     action: 'start' | 'stop' | 'restart' | 'kill'
   ) => {
-    await serverActionMutation.mutateAsync(action);
+    setServerActionError(null);
+    try {
+      await serverActionMutation.mutateAsync(action);
+    } catch (error: any) {
+      setServerActionError(error?.message || 'No se pudo ejecutar la acción del servidor');
+    }
   };
 
   const handleKickPlayer = async (name: string, reason?: string) => {
@@ -87,6 +94,8 @@ export const App: React.FC = () => {
       telemetry={telemetry || null}
       playit={playit || null}
       onServerAction={handleServerAction}
+      serverActionPending={serverActionMutation.isPending}
+      serverActionError={serverActionError}
     >
       <AnimatePresence mode="wait">
         <motion.div
@@ -102,6 +111,7 @@ export const App: React.FC = () => {
               telemetry={telemetry || null}
               playit={playit || null}
               onServerAction={handleServerAction}
+              actionPending={serverActionMutation.isPending}
               onNavigateTab={setCurrentTab}
               onKickPlayer={handleKickPlayer}
               onBanPlayer={handleBanPlayer}

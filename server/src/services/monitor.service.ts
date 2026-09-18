@@ -174,6 +174,7 @@ export class MonitorService {
       status: procStatus.status,
       pid: procStatus.pid,
       uptime: procStatus.uptime,
+      controlError: procStatus.controlError || null,
       version: displayVersion,
       serverDir: installed.serverDir || serverDir,
       installedVersion: installed,

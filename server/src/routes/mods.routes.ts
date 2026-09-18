@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import path from 'path';
+import archiver from 'archiver';
 import { ModsService } from '../services/mods.service';
 
 const router = Router();
@@ -37,6 +38,43 @@ router.get('/', (_req: Request, res: Response) => {
     res.json(mods);
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to list mods' });
+  }
+});
+
+// GET /api/mods/download-enabled
+router.get('/download-enabled', (_req: Request, res: Response) => {
+  try {
+    const enabledMods = modsService.listEnabledModFiles();
+    if (enabledMods.length === 0) {
+      res.status(404).json({ error: 'No hay mods habilitados para descargar' });
+      return;
+    }
+
+    const date = new Date().toISOString().slice(0, 10);
+    const archiveName = `minecraft-mods-enabled-${date}.zip`;
+    const archive = archiver('zip', { zlib: { level: 9 } });
+
+    res.status(200);
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${archiveName}"`);
+    res.setHeader('Cache-Control', 'no-store');
+
+    archive.on('error', (error) => {
+      console.error('[Mods] Error creando descarga de mods:', error);
+      if (!res.headersSent) res.status(500).json({ error: 'No se pudo crear el archivo de mods' });
+      else res.destroy(error);
+    });
+    res.on('close', () => {
+      if (!res.writableFinished) archive.abort();
+    });
+
+    archive.pipe(res);
+    for (const mod of enabledMods) {
+      archive.file(mod.fullPath, { name: mod.filename });
+    }
+    void archive.finalize();
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'No se pudo preparar la descarga de mods' });
   }
 });
 

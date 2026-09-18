@@ -11,6 +11,8 @@ interface MainLayoutProps {
   telemetry: TelemetryData | null;
   playit: PlayitStatus | null;
   onServerAction: (action: 'start' | 'stop' | 'restart' | 'kill') => Promise<void>;
+  serverActionPending: boolean;
+  serverActionError: string | null;
   children: React.ReactNode;
 }
 
@@ -20,10 +22,13 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
   telemetry,
   playit,
   onServerAction,
+  serverActionPending,
+  serverActionError,
   children,
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isPowerModalOpen, setIsPowerModalOpen] = useState(false);
+  const controlError = serverActionError || telemetry?.controlError || null;
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-dark-950 text-slate-100">
@@ -44,10 +49,19 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
           telemetry={telemetry}
           playit={playit}
           onServerAction={onServerAction}
+          actionPending={serverActionPending}
         />
 
+        {controlError && (
+          <div className="px-4 sm:px-6 pt-3" role="alert">
+            <div className="max-w-7xl mx-auto rounded-xl border border-rose-500/30 bg-rose-500/10 px-3.5 py-2.5 text-xs text-rose-200">
+              {controlError}
+            </div>
+          </div>
+        )}
+
         {/* Scrollable Viewport */}
-        <main className="flex-1 overflow-y-auto px-4 sm:px-6 py-6 pb-20 lg:pb-6">
+        <main className="flex-1 overflow-y-auto px-4 sm:px-6 py-6 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-6">
           <div className="max-w-7xl mx-auto w-full">{children}</div>
         </main>
       </div>
@@ -57,6 +71,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
         currentTab={currentTab}
         onSelectTab={onSelectTab}
         isOpen={isMobileMenuOpen}
+        onOpen={() => setIsMobileMenuOpen(true)}
         onClose={() => setIsMobileMenuOpen(false)}
         telemetry={telemetry}
       />
@@ -67,6 +82,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
         onClose={() => setIsPowerModalOpen(false)}
         isRunning={Boolean(telemetry?.isRunning)}
         onExecute={onServerAction}
+        actionPending={serverActionPending}
       />
     </div>
   );

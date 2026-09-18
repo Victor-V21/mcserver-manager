@@ -35,6 +35,7 @@ interface DashboardViewProps {
   telemetry: TelemetryData | null;
   playit: PlayitStatus | null;
   onServerAction: (action: 'start' | 'stop' | 'restart' | 'kill') => Promise<void>;
+  actionPending: boolean;
   onNavigateTab: (tab: string) => void;
   onKickPlayer: (name: string, reason?: string) => Promise<void>;
   onBanPlayer: (name: string, reason?: string) => Promise<void>;
@@ -45,6 +46,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   telemetry,
   playit,
   onServerAction,
+  actionPending,
   onNavigateTab,
   onKickPlayer,
   onBanPlayer,
@@ -219,6 +221,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 variant="emerald"
                 size="md"
                 onClick={() => onServerAction('start')}
+                disabled={actionPending}
               >
                 INICIAR SERVIDOR
               </RetroPixelButton>
@@ -228,6 +231,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   variant="amber"
                   size="sm"
                   onClick={() => onServerAction('restart')}
+                  disabled={actionPending}
                 >
                   <RotateCw className="w-3.5 h-3.5" />
                   <span>Reiniciar</span>
@@ -237,6 +241,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   variant="rose"
                   size="sm"
                   onClick={() => setIsPowerModalOpen(true)}
+                  disabled={actionPending}
                 >
                   <span>Detener / Kill...</span>
                 </GlassShimmerButton>
@@ -679,6 +684,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         onClose={() => setIsPowerModalOpen(false)}
         isRunning={isOnline}
         onExecute={onServerAction}
+        actionPending={actionPending}
       />
     </div>
   );

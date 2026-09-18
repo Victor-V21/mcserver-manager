@@ -7,7 +7,7 @@ import { SUBDIRS } from '../config/constants';
 import modErrors from '../data/mod-errors.json';
 import { CrashDiagnostic } from '../types';
 
-type ProcessState = 'online' | 'offline' | 'starting' | 'stopping';
+type ProcessState = 'online' | 'offline' | 'starting' | 'stopping' | 'crashed';
 
 /** Owns the Minecraft process running in the same container as the panel. */
 export class ProcessService {
@@ -18,6 +18,7 @@ export class ProcessService {
   private startTime: number | null = null;
   private isUserStopping = false;
   private lastCrashDiagnostic: CrashDiagnostic | null = null;
+  private lastControlError: string | null = null;
   private modErrorPatterns: any[] = modErrors;
   private logBuffer = '';
 
@@ -96,29 +97,58 @@ export class ProcessService {
     }
   }
 
+  private hasActiveProcess(processRef: ChildProcess | null = this.serverProcess): boolean {
+    return Boolean(processRef && processRef.exitCode === null && processRef.signalCode === null);
+  }
+
+  private signalProcessTree(signal: NodeJS.Signals): void {
+    const child = this.serverProcess;
+    if (!child?.pid) return;
+
+    // The launcher can be a shell which then starts Java. A process group
+    // keeps stop/kill from leaving an orphaned Minecraft process holding 25565.
+    if (process.platform !== 'win32') {
+      try {
+        process.kill(-child.pid, signal);
+        return;
+      } catch {
+        // Fall back to the direct child when the group no longer exists.
+      }
+    }
+
+    try {
+      child.kill(signal);
+    } catch {
+      // The process may have exited between the status check and the signal.
+    }
+  }
+
   public async getStatus(): Promise<{
     isRunning: boolean;
     pid: number | null;
     status: ProcessState;
     uptime: number;
     crashDiagnostic?: CrashDiagnostic | null;
+    controlError?: string | null;
     cpuPercent?: number;
     memoryBytes?: number;
   }> {
-    const isRunning = this.serverProcess !== null && !this.serverProcess.killed;
+    const isRunning = this.hasActiveProcess();
     return {
       isRunning,
-      pid: this.serverProcess?.pid || null,
+      pid: isRunning ? this.serverProcess?.pid || null : null,
       status: this.serverStatus,
       uptime: isRunning && this.startTime ? Math.floor((Date.now() - this.startTime) / 1000) : 0,
       crashDiagnostic: this.lastCrashDiagnostic,
+      controlError: this.lastControlError,
     };
   }
 
   public async start(): Promise<{ success: boolean; message: string }> {
-    if (this.serverProcess && !this.serverProcess.killed) {
+    if (this.hasActiveProcess()) {
       return { success: false, message: 'El servidor ya está ejecutándose' };
     }
+    this.serverProcess = null;
 
     const root = this.configService.getRootPath();
     const serverDir = this.configService.getServerDir();
@@ -161,6 +191,7 @@ export class ProcessService {
     this.serverStatus = 'starting';
     this.startTime = Date.now();
     this.lastCrashDiagnostic = null;
+    this.lastControlError = null;
     this.logBuffer = '';
 
     const logsDir = path.join(serverDir, 'logs');
@@ -172,6 +203,7 @@ export class ProcessService {
         cwd,
         env: { ...process.env },
         stdio: ['pipe', 'pipe', 'pipe'],
+        detached: process.platform !== 'win32',
       });
       this.serverProcess = child;
 
@@ -188,14 +220,26 @@ export class ProcessService {
       child.stdout?.on('data', handleOutput);
       child.stderr?.on('data', handleOutput);
       child.on('close', async (code) => {
+        if (this.serverProcess !== child) {
+          logStream.end();
+          return;
+        }
         const wasStarting = this.serverStatus === 'starting';
         const hadDiagnostic = this.lastCrashDiagnostic !== null;
-        const wasUserStopping = this.isUserStopping;
-        this.serverProcess = null;
-        this.serverStatus = 'offline';
+        const wasUserStopping = this.isUserStopping || this.serverStatus === 'stopping';
+        if (this.serverProcess === child) this.serverProcess = null;
         this.startTime = null;
         this.isUserStopping = false;
         logStream.end();
+
+        if (wasUserStopping || code === 0) {
+          this.serverStatus = 'offline';
+        } else {
+          this.serverStatus = 'crashed';
+          this.lastControlError = code === null
+            ? 'El proceso de Minecraft terminó por una señal del sistema.'
+            : `El proceso de Minecraft terminó con código ${code}.`;
+        }
 
         const config = this.configService.getConfig();
         const abnormalExit = !wasUserStopping && (wasStarting || hadDiagnostic || code !== 0);
@@ -221,11 +265,19 @@ export class ProcessService {
       });
       child.on('error', (error) => {
         console.error('[ProcessService] No se pudo iniciar Minecraft:', error);
-        this.serverProcess = null;
+        this.lastControlError = error.message;
+        if (this.serverProcess === child) this.serverProcess = null;
         this.serverStatus = 'offline';
         this.startTime = null;
         logStream.end();
       });
+
+      // Catch scripts with an invalid command or missing runtime immediately
+      // instead of reporting success while the child has already exited.
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      if (!this.hasActiveProcess(child)) {
+        throw new Error(this.lastControlError || 'El proceso de Minecraft terminó durante el arranque');
+      }
 
       return { success: true, message: 'Servidor Minecraft iniciado' };
     } catch (error: any) {
@@ -237,40 +289,56 @@ export class ProcessService {
   }
 
   public async stop(): Promise<{ success: boolean; message: string }> {
-    if (!this.serverProcess || this.serverProcess.killed) {
+    if (!this.hasActiveProcess()) {
       this.serverStatus = 'offline';
       return { success: false, message: 'El servidor no está ejecutándose' };
     }
 
     this.isUserStopping = true;
     this.serverStatus = 'stopping';
-    this.sendCommand('stop');
-    if (await this.waitForExit(25000)) return { success: true, message: 'Servidor detenido correctamente' };
+    const commandSent = this.sendCommand('stop');
+    if (commandSent && await this.waitForExit(25000)) {
+      return { success: true, message: 'Servidor detenido correctamente' };
+    }
 
     console.warn('[ProcessService] Minecraft no respondió a stop; enviando SIGTERM');
-    this.serverProcess?.kill('SIGTERM');
+    this.signalProcessTree('SIGTERM');
     if (await this.waitForExit(5000)) return { success: true, message: 'Servidor detenido con SIGTERM' };
     return this.kill();
   }
 
   public async restart(): Promise<{ success: boolean; message: string }> {
-    if (this.serverProcess && !this.serverProcess.killed) await this.stop();
+    if (this.hasActiveProcess()) await this.stop();
     await new Promise((resolve) => setTimeout(resolve, 1000));
     return this.start();
   }
 
   public async kill(): Promise<{ success: boolean; message: string }> {
+    const hadProcess = this.hasActiveProcess();
     this.isUserStopping = true;
-    if (this.serverProcess && !this.serverProcess.killed) this.serverProcess.kill('SIGKILL');
+    if (!hadProcess) {
+      this.serverProcess = null;
+      this.serverStatus = 'offline';
+      this.startTime = null;
+      return { success: false, message: 'El servidor no está ejecutándose' };
+    }
+
+    this.serverStatus = 'stopping';
+    this.signalProcessTree('SIGKILL');
+    if (await this.waitForExit(5000)) {
+      return { success: true, message: 'Proceso de Minecraft finalizado inmediatamente' };
+    }
+
     this.serverProcess = null;
     this.serverStatus = 'offline';
     this.startTime = null;
+    this.isUserStopping = false;
     return { success: true, message: 'Proceso de Minecraft finalizado inmediatamente' };
   }
 
   public sendCommand(command: string): boolean {
     const cleanCommand = command.replace(/[\r\n]/g, ' ').trim().replace(/^\/+/, '');
-    if (!cleanCommand || !this.serverProcess?.stdin || this.serverProcess.stdin.destroyed) return false;
+    if (!cleanCommand || !this.hasActiveProcess() || !this.serverProcess?.stdin || this.serverProcess.stdin.destroyed) return false;
     this.serverProcess.stdin.write(`${cleanCommand}\n`);
     return true;
   }
@@ -366,7 +434,7 @@ export class ProcessService {
   private async waitForExit(timeoutMs: number): Promise<boolean> {
     const startedAt = Date.now();
     while (Date.now() - startedAt < timeoutMs) {
-      if (!this.serverProcess || this.serverProcess.killed) return true;
+      if (!this.hasActiveProcess()) return true;
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
     return false;

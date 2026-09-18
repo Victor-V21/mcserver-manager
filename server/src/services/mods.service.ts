@@ -62,6 +62,16 @@ export class ModsService {
     }
   }
 
+  public listEnabledModFiles(): { filename: string; fullPath: string }[] {
+    const dir = this.getModsDir();
+    return this.listMods()
+      .filter((mod) => mod.isEnabled)
+      .map((mod) => ({
+        filename: mod.filename,
+        fullPath: path.join(dir, mod.filename),
+      }));
+  }
+
   public toggleMod(filename: string, enable: boolean): { success: boolean; newName: string } {
     let safeName = path.basename(filename);
     const dir = this.getModsDir();
@@ -177,4 +187,3 @@ export class ModsService {
     return { success: true, count };
   }
 }
-

@@ -10,6 +10,7 @@ interface TopbarProps {
   telemetry: TelemetryData | null;
   playit: PlayitStatus | null;
   onServerAction: (action: 'start' | 'stop' | 'restart' | 'kill') => void;
+  actionPending: boolean;
 }
 
 export const Topbar: React.FC<TopbarProps> = ({
@@ -18,6 +19,7 @@ export const Topbar: React.FC<TopbarProps> = ({
   telemetry,
   playit,
   onServerAction,
+  actionPending,
 }) => {
   const [copied, setCopied] = useState(false);
   const [showPowerDropdown, setShowPowerDropdown] = useState(false);
@@ -97,6 +99,7 @@ export const Topbar: React.FC<TopbarProps> = ({
             variant={isOnline ? 'emerald' : 'rose'}
             size="sm"
             onClick={() => setShowPowerDropdown(!showPowerDropdown)}
+            disabled={actionPending}
           >
             <RarePowerIcon size={15} />
             <span>{isOnline ? 'En Línea' : 'Detenido'}</span>

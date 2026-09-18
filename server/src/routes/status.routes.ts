@@ -20,6 +20,7 @@ router.get('/', async (_req: Request, res: Response) => {
       pid: null,
       uptime: 0,
       version: null,
+      controlError: err?.message || 'No se pudo consultar el estado del servidor',
       cpu: { host: 0, java: 0 },
       hostCpu: 0,
       ram: { used: 0, total: 0, percent: 0, maxAllocated: 0 },

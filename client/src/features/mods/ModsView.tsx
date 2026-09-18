@@ -19,6 +19,7 @@ import {
   RefreshCw,
   X,
   PowerOff,
+  Download,
 } from 'lucide-react';
 
 interface ModsViewProps {
@@ -39,6 +40,7 @@ export const ModsView: React.FC<ModsViewProps> = ({ telemetry }) => {
     message: string;
   } | null>(null);
   const [restarting, setRestarting] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   // Upload state
   const [isDragging, setIsDragging] = useState(false);
@@ -198,6 +200,32 @@ export const ModsView: React.FC<ModsViewProps> = ({ telemetry }) => {
     }
   };
 
+  const handleDownloadEnabled = async () => {
+    setDownloading(true);
+    try {
+      const { blob, filename } = await api.downloadEnabledMods();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setNotice({
+        type: 'success',
+        message: `Descarga preparada con ${enabledCount} mod(s) habilitado(s).`,
+      });
+    } catch (err: any) {
+      setNotice({
+        type: 'error',
+        message: err.message || 'No se pudieron descargar los mods habilitados',
+      });
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   const handleFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const validFiles = Array.from(files).filter(f => f.name.endsWith('.jar') || f.name.endsWith('.jar.disabled'));
@@ -308,6 +336,21 @@ export const ModsView: React.FC<ModsViewProps> = ({ telemetry }) => {
               />
             </>
           )}
+
+          <GlassShimmerButton
+            variant="cyan"
+            size="sm"
+            onClick={handleDownloadEnabled}
+            disabled={downloading || enabledCount === 0}
+            title={enabledCount === 0 ? 'No hay mods habilitados' : 'Descargar mods habilitados'}
+          >
+            {downloading ? (
+              <div className="w-4 h-4 border-2 border-cyan-200/30 border-t-cyan-200 rounded-full animate-spin" />
+            ) : (
+              <Download className="w-4 h-4" />
+            )}
+            <span>{downloading ? 'Preparando…' : 'Descargar activos'}</span>
+          </GlassShimmerButton>
 
           {/* Upload Button with RareUI GlassShimmerButton */}
           <GlassShimmerButton

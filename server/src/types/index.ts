@@ -21,7 +21,7 @@ export interface CrashDiagnostic {
 export interface ServerStatusResponse {
   isRunning: boolean;
   pid: number | null;
-  status: 'online' | 'offline' | 'starting' | 'stopping';
+  status: 'online' | 'offline' | 'starting' | 'stopping' | 'crashed';
   state?: string;
   uptime: number;
   version?: string | null;

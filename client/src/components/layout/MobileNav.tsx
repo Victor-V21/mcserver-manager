@@ -18,6 +18,7 @@ interface MobileNavProps {
   currentTab: string;
   onSelectTab: (tab: string) => void;
   isOpen: boolean;
+  onOpen: () => void;
   onClose: () => void;
   telemetry: TelemetryData | null;
 }
@@ -26,6 +27,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({
   currentTab,
   onSelectTab,
   isOpen,
+  onOpen,
   onClose,
   telemetry,
 }) => {
@@ -54,7 +56,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({
   return (
     <>
       {/* Bottom Floating Bar for Smartphones */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 h-16 bg-dark-900/95 backdrop-blur-lg border-t border-slate-800/80 px-2 flex items-center justify-around z-30">
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 min-h-16 h-[calc(4rem+env(safe-area-inset-bottom))] bg-dark-900/95 backdrop-blur-lg border-t border-slate-800/80 px-1 pb-[env(safe-area-inset-bottom)] flex items-center justify-around z-30">
         {primaryTabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = currentTab === tab.id;
@@ -62,7 +64,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({
             <button
               key={tab.id}
               onClick={() => onSelectTab(tab.id)}
-              className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-colors cursor-pointer ${
+              className={`flex-1 min-w-0 min-h-11 flex flex-col items-center justify-center py-1 px-1 rounded-xl transition-colors cursor-pointer ${
                 isActive ? 'text-emerald-400' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -73,8 +75,10 @@ export const MobileNav: React.FC<MobileNavProps> = ({
         })}
 
         <button
-          onClick={onClose}
-          className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-colors cursor-pointer ${
+          onClick={onOpen}
+          aria-expanded={isOpen}
+          aria-label="Abrir más opciones"
+          className={`flex-1 min-w-0 min-h-11 flex flex-col items-center justify-center py-1 px-1 rounded-xl transition-colors cursor-pointer ${
             isOpen ? 'text-emerald-400' : 'text-slate-400 hover:text-slate-200'
           }`}
         >

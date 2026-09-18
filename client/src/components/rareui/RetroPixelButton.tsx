@@ -68,7 +68,7 @@ export const RetroPixelButton: React.FC<RetroPixelButtonProps> = ({
 
   return (
     <motion.button
-      className={`group relative flex cursor-pointer items-center overflow-hidden rounded-xl border font-mono font-bold transition-all ${style.border} ${style.bg} ${style.glow} ${sizeClasses[size]} ${className}`}
+      className={`group relative flex cursor-pointer items-center overflow-hidden rounded-xl border font-mono font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 ${style.border} ${style.bg} ${style.glow} ${sizeClasses[size]} ${className}`}
       whileTap={{ scale: 0.97 }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}

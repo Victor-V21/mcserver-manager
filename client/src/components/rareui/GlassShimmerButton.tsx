@@ -30,7 +30,7 @@ export const GlassShimmerButton: React.FC<GlassShimmerButtonProps> = ({
 
   return (
     <button
-      className={`group relative inline-flex items-center justify-center overflow-hidden rounded-xl border backdrop-blur-md transition-all duration-300 active:scale-95 cursor-pointer ${variantStyles[variant]} ${sizeStyles[size]} ${className}`}
+      className={`group relative inline-flex items-center justify-center overflow-hidden rounded-xl border backdrop-blur-md transition-all duration-300 active:scale-95 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 ${variantStyles[variant]} ${sizeStyles[size]} ${className}`}
       {...props}
     >
       {/* Shimmer sweeping beam */}

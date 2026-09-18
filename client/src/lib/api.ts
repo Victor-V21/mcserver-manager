@@ -98,10 +98,14 @@ export const api = {
 
   // Server Actions
   executeServerAction: async (action: 'start' | 'stop' | 'restart' | 'kill'): Promise<{ success: boolean; message: string }> => {
-    return request('/api/server/action', {
+    const result = await request<{ success: boolean; message: string }>('/api/server/action', {
       method: 'POST',
       body: JSON.stringify({ action }),
     });
+    if (!result.success) {
+      throw new Error(result.message || 'El servidor rechazó la acción solicitada');
+    }
+    return result;
   },
 
   // AI Diagnostic
@@ -202,6 +206,27 @@ export const api = {
   // Mods
   getMods: async (): Promise<ModFile[]> => {
     return request('/api/mods', { method: 'GET' });
+  },
+  downloadEnabledMods: async (): Promise<{ blob: Blob; filename: string }> => {
+    const token = typeof localStorage !== 'undefined' ? localStorage.getItem('mc_auth_token') : null;
+    const res = await fetch('/api/mods/download-enabled', {
+      method: 'GET',
+      credentials: 'include',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+
+    if (!res.ok) {
+      let errorMsg = `Error al descargar mods: HTTP ${res.status}`;
+      try {
+        const payload = await res.json();
+        if (payload?.error) errorMsg = payload.error;
+      } catch {}
+      throw new Error(errorMsg);
+    }
+
+    const disposition = res.headers.get('content-disposition') || '';
+    const filename = disposition.match(/filename="?([^";]+)"?/i)?.[1] || 'minecraft-mods-enabled.zip';
+    return { blob: await res.blob(), filename };
   },
   toggleMod: async (filename: string, enable: boolean): Promise<{ success: boolean }> => {
     return request('/api/mods/toggle', {

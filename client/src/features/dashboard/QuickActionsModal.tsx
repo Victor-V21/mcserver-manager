@@ -7,6 +7,7 @@ interface QuickActionsModalProps {
   onClose: () => void;
   isRunning: boolean;
   onExecute: (action: 'start' | 'stop' | 'restart' | 'kill') => Promise<void>;
+  actionPending: boolean;
 }
 
 export const QuickActionsModal: React.FC<QuickActionsModalProps> = ({
@@ -14,6 +15,7 @@ export const QuickActionsModal: React.FC<QuickActionsModalProps> = ({
   onClose,
   isRunning,
   onExecute,
+  actionPending,
 }) => {
   const [confirmAction, setConfirmAction] = useState<'stop' | 'restart' | 'kill' | null>(null);
   const [loading, setLoading] = useState(false);
@@ -59,14 +61,14 @@ export const QuickActionsModal: React.FC<QuickActionsModalProps> = ({
           <div className="flex items-center justify-end gap-2.5 pt-2">
             <button
               onClick={() => setConfirmAction(null)}
-              disabled={loading}
+              disabled={loading || actionPending}
               className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors"
             >
               Cancelar
             </button>
             <button
               onClick={handleConfirmAction}
-              disabled={loading}
+              disabled={loading || actionPending}
               className={`px-4 py-2 rounded-xl text-xs font-medium text-white transition-all flex items-center gap-2 ${
                 confirmAction === 'kill'
                   ? 'bg-rose-600 hover:bg-rose-500 shadow-lg shadow-rose-900/40'
@@ -91,7 +93,7 @@ export const QuickActionsModal: React.FC<QuickActionsModalProps> = ({
           {!isRunning ? (
             <button
               onClick={() => handleTrigger('start')}
-              disabled={loading}
+              disabled={loading || actionPending}
               className="w-full p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 hover:bg-emerald-500/20 text-emerald-400 font-medium text-xs flex items-center justify-between transition-all group"
             >
               <div className="flex items-center gap-3">
@@ -108,7 +110,7 @@ export const QuickActionsModal: React.FC<QuickActionsModalProps> = ({
             <>
               <button
                 onClick={() => handleTrigger('restart')}
-                disabled={loading}
+                disabled={loading || actionPending}
                 className="w-full p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 text-amber-400 font-medium text-xs flex items-center justify-between transition-all group"
               >
                 <div className="flex items-center gap-3">
@@ -124,7 +126,7 @@ export const QuickActionsModal: React.FC<QuickActionsModalProps> = ({
 
               <button
                 onClick={() => handleTrigger('stop')}
-                disabled={loading}
+                disabled={loading || actionPending}
                 className="w-full p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 hover:bg-rose-500/20 text-rose-400 font-medium text-xs flex items-center justify-between transition-all group"
               >
                 <div className="flex items-center gap-3">
